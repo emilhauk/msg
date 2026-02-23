@@ -1,5 +1,7 @@
 FROM golang:1.25-alpine AS builder
 
+ARG GIT_SHA=dev
+
 WORKDIR /app
 
 COPY go.mod go.sum ./
@@ -7,7 +9,7 @@ RUN go mod download
 
 COPY . .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w" -o /msg .
+RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -ldflags="-s -w -X main.buildVersion=${GIT_SHA}" -o /msg .
 
 FROM alpine:3.21
 
