@@ -662,12 +662,26 @@
       if (el) el.remove();
     });
 
+    es.addEventListener('edit', function (e) {
+      // data format: "<msgId>\n<html>" (two SSE data lines joined by \n)
+      const nl = e.data.indexOf('\n');
+      if (nl < 0) return;
+      const msgId = e.data.slice(0, nl);
+      const html  = e.data.slice(nl + 1);
+      const el = document.getElementById('msg-' + msgId);
+      if (!el) return;
+      el.outerHTML = html;
+      // Re-process HTMX on the swapped-in element so hx-delete/hx-patch work.
+      const newEl = document.getElementById('msg-' + msgId);
+      if (newEl) htmx.process(newEl);
+    });
+
     es.addEventListener('unfurl', function (e) {
-      // data format: "<msgId>:<html>"
-      const colon = e.data.indexOf(':');
-      if (colon < 0) return;
-      const msgId = e.data.slice(0, colon);
-      const html  = e.data.slice(colon + 1);
+      // data format: "<msgId>\n<html>" (two SSE data lines joined by \n)
+      const nl = e.data.indexOf('\n');
+      if (nl < 0) return;
+      const msgId = e.data.slice(0, nl);
+      const html  = e.data.slice(nl + 1);
       const target = document.getElementById('preview-' + msgId);
       if (target) {
         // Just set the HTML — the ResizeObserver will handle scrolling when
@@ -743,6 +757,94 @@
     document.addEventListener('htmx:beforeRequest', onBefore);
     document.addEventListener('htmx:responseError', onError);
     document.addEventListener('htmx:sendError',     onError);
+  }());
+
+  // ---- Inline message edit UX ----
+  // Uses event delegation so it works on messages inserted via SSE.
+  (function () {
+    function openEdit(msgId) {
+      const article = document.getElementById('msg-' + msgId);
+      if (!article) return;
+      const textEl = document.getElementById('text-' + msgId);
+      const form   = document.getElementById('edit-form-' + msgId);
+      if (!textEl || !form) return;
+      textEl.hidden = true;
+      form.hidden = false;
+      // Auto-size the textarea to its content.
+      const ta = form.querySelector('textarea');
+      if (ta) {
+        ta.style.height = 'auto';
+        ta.style.height = Math.min(ta.scrollHeight, 300) + 'px';
+        ta.focus();
+        // Move cursor to end.
+        ta.selectionStart = ta.selectionEnd = ta.value.length;
+      }
+    }
+
+    function closeEdit(msgId) {
+      const article = document.getElementById('msg-' + msgId);
+      if (!article) return;
+      const textEl = document.getElementById('text-' + msgId);
+      const form   = document.getElementById('edit-form-' + msgId);
+      if (textEl) textEl.hidden = false;
+      if (form)   form.hidden = true;
+    }
+
+    // Click delegation — edit trigger and cancel buttons.
+    document.addEventListener('click', function (e) {
+      const trigger = e.target.closest('[data-edit-trigger]');
+      if (trigger) {
+        openEdit(trigger.dataset.editTrigger);
+        return;
+      }
+      const cancel = e.target.closest('[data-edit-cancel]');
+      if (cancel) {
+        closeEdit(cancel.dataset.editCancel);
+      }
+    });
+
+    // Enter (without Shift) submits the edit form; Shift+Enter inserts newline.
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Enter' || e.shiftKey) return;
+      const ta = e.target;
+      if (!ta || !ta.classList.contains('message-edit-form__textarea')) return;
+      const form = ta.closest('.message-edit-form');
+      if (!form) return;
+      e.preventDefault();
+      form.requestSubmit();
+    });
+
+    // Escape closes the edit form.
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      const ta = e.target;
+      if (!ta || !ta.classList.contains('message-edit-form__textarea')) return;
+      const form = ta.closest('.message-edit-form');
+      if (!form) return;
+      // Extract msgId from form id ("edit-form-<msgId>").
+      const msgId = form.id.replace('edit-form-', '');
+      closeEdit(msgId);
+    });
+
+    // Auto-resize edit textarea on input.
+    document.addEventListener('input', function (e) {
+      const ta = e.target;
+      if (!ta || !ta.classList.contains('message-edit-form__textarea')) return;
+      ta.style.height = 'auto';
+      ta.style.height = Math.min(ta.scrollHeight, 300) + 'px';
+    });
+
+    // Close the edit form immediately on a successful PATCH (204).
+    // The SSE edit event will replace the full article shortly after, but
+    // closing optimistically means the user sees instant feedback.
+    document.addEventListener('htmx:afterRequest', function (e) {
+      const form = e.detail.elt;
+      if (!form || !form.classList.contains('message-edit-form')) return;
+      if (e.detail.successful) {
+        const msgId = form.id.replace('edit-form-', '');
+        closeEdit(msgId);
+      }
+    });
   }());
 
   // ---- Reaction preset popover ----

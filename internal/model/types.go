@@ -2,13 +2,14 @@ package model
 
 import "time"
 
-// User represents an authenticated user.
+// User represents an authenticated user with a stable canonical identity.
+// The ID is a UUID v4 that does not change across provider logins.
 type User struct {
 	ID        string `redis:"id"`
 	Name      string `redis:"name"`
 	Email     string `redis:"email"`
 	AvatarURL string `redis:"avatar_url"`
-	Provider  string `redis:"provider"`
+	CreatedAt string `redis:"created_at"`
 }
 
 // Room represents a chat room.
@@ -28,6 +29,9 @@ type Message struct {
 	CreatedAtMS string `redis:"created_at"`
 	// AttachmentsJSON is a JSON-encoded []Attachment stored in Redis.
 	AttachmentsJSON string `redis:"attachments"`
+	// EditedAtMS is stored in Redis as millisecond unix timestamp string.
+	// Empty for messages that have never been edited.
+	EditedAtMS string `redis:"edited_at"`
 
 	// Populated from Redis lookups or JSON decode; not stored directly.
 	User        *User

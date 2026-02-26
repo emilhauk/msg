@@ -17,10 +17,15 @@ type SSEHandler struct {
 // HandleSSE streams events to the client via Server-Sent Events.
 // Payloads published to Redis are expected to be in the form:
 //
-//	"msg:<html>"            → event: message
-//	"unfurl:<id>:<html>"    → event: unfurl,   data: <id>:<html>
-//	"reaction:<id>:<html>"  → event: reaction, data: <id>:<html>
+//	"msg:<html>"            → event: message,  data: <html>
+//	"unfurl:<id>:<html>"    → event: unfurl,   data: <id>\n<html>  (two data lines)
+//	"reaction:<json>"       → event: reaction, data: <json>
 //	"delete:<id>"           → event: delete,   data: <id>
+//	"edit:<id>:<html>"      → event: edit,     data: <id>\n<html>  (two data lines)
+//
+// For unfurl and edit the msgID and HTML are sent as separate SSE data lines so
+// that the newline is the unambiguous separator on the client side. Message IDs
+// contain colons (e.g. "github:12345") which would break a colon-based split.
 func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 	roomID := r.PathValue("id")
 
@@ -63,15 +68,15 @@ func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 				flusher.Flush()
 			case strings.HasPrefix(payload, "unfurl:"):
 				rest := strings.TrimPrefix(payload, "unfurl:")
-				idx := strings.Index(rest, ":")
+				idx := strings.Index(rest, ":<")
 				if idx < 0 {
 					continue
 				}
 				msgID := rest[:idx]
 				html := rest[idx+1:]
-				// msgID is embedded as a prefix in data so the client can route
-				// it to the correct #preview-<msgID> element.
-				fmt.Fprintf(w, "event: unfurl\ndata: %s:%s\n\n", msgID, escapeSSE(html))
+				// msgID and html are sent as two separate SSE data lines.
+				// The client splits on the first \n (which SSE joins from multiple data: fields).
+				fmt.Fprintf(w, "event: unfurl\ndata: %s\ndata: %s\n\n", msgID, escapeSSE(html))
 				flusher.Flush()
 			case strings.HasPrefix(payload, "reaction:"):
 				// Payload is a JSON object; forward it as a single data line.
@@ -81,6 +86,18 @@ func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 			case strings.HasPrefix(payload, "delete:"):
 				msgID := strings.TrimPrefix(payload, "delete:")
 				fmt.Fprintf(w, "event: delete\ndata: %s\n\n", msgID)
+				flusher.Flush()
+			case strings.HasPrefix(payload, "edit:"):
+				rest := strings.TrimPrefix(payload, "edit:")
+				idx := strings.Index(rest, ":<")
+				if idx < 0 {
+					continue
+				}
+				msgID := rest[:idx]
+				html := rest[idx+1:]
+				// msgID and html are sent as two separate SSE data lines.
+				// The client splits on the first \n (which SSE joins from multiple data: fields).
+				fmt.Fprintf(w, "event: edit\ndata: %s\ndata: %s\n\n", msgID, escapeSSE(html))
 				flusher.Flush()
 			}
 		}

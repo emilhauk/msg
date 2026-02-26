@@ -54,7 +54,6 @@ func (c *Client) SetSession(ctx context.Context, token string, user model.User) 
 		"id", user.ID,
 		"name", user.Name,
 		"avatar_url", user.AvatarURL,
-		"provider", user.Provider,
 	)
 	pipe.Expire(ctx, key, sessionTTL)
 	_, err := pipe.Exec(ctx)
@@ -73,7 +72,6 @@ func (c *Client) GetSession(ctx context.Context, token string) (*model.User, err
 		ID:        vals["id"],
 		Name:      vals["name"],
 		AvatarURL: vals["avatar_url"],
-		Provider:  vals["provider"],
 	}, nil
 }
 
@@ -86,17 +84,28 @@ func (c *Client) DeleteSession(ctx context.Context, token string) error {
 // Users
 // ---------------------------------------------------------------------------
 
-// UpsertUser writes user data to Redis.
-func (c *Client) UpsertUser(ctx context.Context, user model.User) error {
+// CreateUser writes a new canonical user to Redis. Only called the first time
+// an identity is seen. For subsequent logins, use UpsertUser to refresh
+// display name and avatar.
+func (c *Client) CreateUser(ctx context.Context, user model.User) error {
 	return c.rdb.HSet(ctx, "users:"+user.ID,
 		"id", user.ID,
 		"name", user.Name,
 		"avatar_url", user.AvatarURL,
-		"provider", user.Provider,
+		"email", user.Email,
+		"created_at", user.CreatedAt,
 	).Err()
 }
 
-// GetUser retrieves a user by ID.
+// UpsertUser refreshes the display name and avatar for an existing canonical user.
+func (c *Client) UpsertUser(ctx context.Context, user model.User) error {
+	return c.rdb.HSet(ctx, "users:"+user.ID,
+		"name", user.Name,
+		"avatar_url", user.AvatarURL,
+	).Err()
+}
+
+// GetUser retrieves a canonical user by UUID.
 func (c *Client) GetUser(ctx context.Context, id string) (*model.User, error) {
 	vals, err := c.rdb.HGetAll(ctx, "users:"+id).Result()
 	if err != nil || len(vals) == 0 {
@@ -106,8 +115,37 @@ func (c *Client) GetUser(ctx context.Context, id string) (*model.User, error) {
 		ID:        vals["id"],
 		Name:      vals["name"],
 		AvatarURL: vals["avatar_url"],
-		Provider:  vals["provider"],
+		Email:     vals["email"],
+		CreatedAt: vals["created_at"],
 	}, nil
+}
+
+// GetUserByIdentity looks up the canonical user UUID for a given OAuth identity
+// (provider + provider-scoped user ID), then retrieves the full user record.
+// Returns nil without error when the identity has not been registered before.
+func (c *Client) GetUserByIdentity(ctx context.Context, provider, providerUserID string) (*model.User, error) {
+	canonicalID, err := c.rdb.Get(ctx, "identities:"+provider+":"+providerUserID).Result()
+	if err == goredis.Nil {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("redis: get identity: %w", err)
+	}
+	return c.GetUser(ctx, canonicalID)
+}
+
+// LinkIdentity atomically records that provider:providerUserID maps to the
+// canonical userID and adds the identity string to the user's identity set.
+func (c *Client) LinkIdentity(ctx context.Context, userID, provider, providerUserID string) error {
+	identityKey := "identities:" + provider + ":" + providerUserID
+	identitiesSetKey := "users:" + userID + ":identities"
+	identityMember := provider + ":" + providerUserID
+
+	pipe := c.rdb.Pipeline()
+	pipe.Set(ctx, identityKey, userID, 0) // no TTL — identity mappings are permanent
+	pipe.SAdd(ctx, identitiesSetKey, identityMember)
+	_, err := pipe.Exec(ctx)
+	return err
 }
 
 // ---------------------------------------------------------------------------
@@ -177,6 +215,7 @@ func (c *Client) GetMessage(ctx context.Context, id string) (*model.Message, err
 		CreatedAtMS:     vals["created_at"],
 		CreatedAt:       time.UnixMilli(ms),
 		AttachmentsJSON: vals["attachments"],
+		EditedAtMS:      vals["edited_at"],
 	}
 	if msg.AttachmentsJSON != "" && msg.AttachmentsJSON != "null" {
 		_ = json.Unmarshal([]byte(msg.AttachmentsJSON), &msg.Attachments)
@@ -225,6 +264,16 @@ func (c *Client) fetchMessages(ctx context.Context, ids []string, reverseOrder b
 		}
 	}
 	return msgs, nil
+}
+
+// UpdateMessageText updates a message's text and records the edit timestamp.
+// The message TTL is not reset — it was set at creation and remains unchanged.
+func (c *Client) UpdateMessageText(ctx context.Context, msgID, newText string) error {
+	editedAtMS := strconv.FormatInt(time.Now().UnixMilli(), 10)
+	return c.rdb.HSet(ctx, "messages:"+msgID,
+		"text", newText,
+		"edited_at", editedAtMS,
+	).Err()
 }
 
 // DeleteMessage removes a message hash, its sorted-set entry, and any reactions.

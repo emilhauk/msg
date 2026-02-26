@@ -312,6 +312,9 @@ func (r *Renderer) RenderError(w http.ResponseWriter, status int, data ErrorData
 // RenderString executes the named template and returns the result as a string.
 // Partials rendered via RenderString (SSE fragments) do not use the base layout
 // so they do not need BuildVersion — data is passed through unwrapped.
+// Leading and trailing whitespace is trimmed so that callers can safely use
+// the result as a payload segment without worrying about leading newlines from
+// the {{define}} block boundary.
 func (r *Renderer) RenderString(name string, data any) (string, error) {
 	t, ok := r.templates[name]
 	if !ok {
@@ -322,7 +325,7 @@ func (r *Renderer) RenderString(name string, data any) (string, error) {
 	if err := t.ExecuteTemplate(w, name, data); err != nil {
 		return "", err
 	}
-	return string(buf), nil
+	return strings.TrimSpace(string(buf)), nil
 }
 
 type bytesWriter struct{ buf *[]byte }

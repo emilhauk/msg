@@ -207,6 +207,65 @@ func (h *MessagesHandler) HandleDelete(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// HandleEdit handles PATCH /rooms/{id}/messages/{msgID}.
+// Only the message author may edit their own message. On success the updated
+// message is re-rendered and broadcast via SSE to all clients.
+func (h *MessagesHandler) HandleEdit(w http.ResponseWriter, r *http.Request) {
+	roomID := r.PathValue("id")
+	msgID := r.PathValue("msgID")
+	user := middleware.UserFromContext(r.Context())
+
+	msg, err := h.Redis.GetMessage(r.Context(), msgID)
+	if err != nil || msg == nil {
+		http.Error(w, "message not found", http.StatusNotFound)
+		return
+	}
+
+	if msg.UserID != user.ID {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, "bad request", http.StatusBadRequest)
+		return
+	}
+	newText := strings.TrimSpace(r.FormValue("text"))
+	if newText == "" {
+		http.Error(w, "text is required", http.StatusBadRequest)
+		return
+	}
+
+	if err := h.Redis.UpdateMessageText(r.Context(), msgID, newText); err != nil {
+		http.Error(w, "failed to update message", http.StatusInternalServerError)
+		return
+	}
+
+	// Re-fetch to get the updated text and edited_at timestamp.
+	msg, err = h.Redis.GetMessage(r.Context(), msgID)
+	if err != nil || msg == nil {
+		http.Error(w, "failed to reload message", http.StatusInternalServerError)
+		return
+	}
+
+	// Hydrate with user, unfurl, and reactions for accurate re-render.
+	if err := hydrateMessages(r.Context(), h.Redis, []*model.Message{msg}, user.ID); err != nil {
+		http.Error(w, "failed to hydrate message", http.StatusInternalServerError)
+		return
+	}
+
+	// Re-render and broadcast. The rendered HTML is neutral (CurrentUserID
+	// is set per-viewer by each client's own session), so we broadcast
+	// with the author's ID — each browser already knows its own user ID
+	// from the JS __currentUserID variable and handles the edit button visibility.
+	html, err := h.Renderer.RenderString("message.html", model.MessageView{Message: msg, CurrentUserID: user.ID})
+	if err == nil {
+		_ = h.Redis.Publish(r.Context(), roomID, "edit:"+msgID+":"+html)
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // hydrateMessages fetches user, unfurl, and reaction data for a slice of
 // messages in-place. currentUserID is used to set ReactedByMe on reactions.
 func hydrateMessages(ctx context.Context, redis *redisclient.Client, msgs []*model.Message, currentUserID string) error {

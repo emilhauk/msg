@@ -12,6 +12,8 @@ services:
       RI_DB_HOST: redis
       RI_DB_PORT: 6379
       RI_DB_NAME: msg
+    ports:
+      - "5540:5540"
     volumes:
       - redisinsight_data:/data
     depends_on:

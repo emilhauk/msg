@@ -10,11 +10,30 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/emilhauk/chat/internal/model"
 	redisclient "github.com/emilhauk/chat/internal/redis"
+	"github.com/google/uuid"
 )
+
+// oauthIdentity holds the provider-scoped identity returned by an OAuth provider.
+// It is an intermediate representation used only during the login flow; it is
+// never stored directly as a model.User.
+type oauthIdentity struct {
+	// Provider is the OAuth provider name, e.g. "github".
+	Provider string
+	// ProviderUserID is the provider-scoped user ID, e.g. "12345678".
+	ProviderUserID string
+	// Name is the display name from the provider (used to seed a new user).
+	Name string
+	// AvatarURL is the avatar URL from the provider (used to seed a new user).
+	AvatarURL string
+	// Email is the verified primary email (used for access-list checks only).
+	Email string
+}
 
 // Handler holds dependencies for OAuth and session handlers.
 type Handler struct {
@@ -127,18 +146,18 @@ func (h *Handler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.fetchGitHubUser(r.Context(), accessToken)
+	identity, err := h.fetchGitHubUser(r.Context(), accessToken)
 	if err != nil {
 		http.Redirect(w, r, "/login?error=fetch_user", http.StatusFound)
 		return
 	}
 
-	if !h.checkAccess(user.Email) {
+	if !h.checkAccess(identity.Email) {
 		http.Redirect(w, r, "/login?error=access_denied", http.StatusFound)
 		return
 	}
 
-	if err := h.createSession(r.Context(), w, *user); err != nil {
+	if err := h.createSession(r.Context(), w, identity); err != nil {
 		http.Error(w, "failed to create session", http.StatusInternalServerError)
 		return
 	}
@@ -155,10 +174,40 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, "/login", http.StatusFound)
 }
 
-func (h *Handler) createSession(ctx context.Context, w http.ResponseWriter, user model.User) error {
-	if err := h.Redis.UpsertUser(ctx, user); err != nil {
-		return err
+// createSession resolves or creates a canonical user for the given OAuth
+// identity, links the identity if it is new, and issues a signed session cookie.
+func (h *Handler) createSession(ctx context.Context, w http.ResponseWriter, identity *oauthIdentity) error {
+	// Look up whether we already have a canonical user for this identity.
+	user, err := h.Redis.GetUserByIdentity(ctx, identity.Provider, identity.ProviderUserID)
+	if err != nil {
+		return fmt.Errorf("look up identity: %w", err)
 	}
+
+	if user == nil {
+		// First time we see this identity — create a new canonical user.
+		user = &model.User{
+			ID:        uuid.New().String(),
+			Name:      identity.Name,
+			AvatarURL: identity.AvatarURL,
+			Email:     identity.Email,
+			CreatedAt: strconv.FormatInt(time.Now().UnixMilli(), 10),
+		}
+		if err := h.Redis.CreateUser(ctx, *user); err != nil {
+			return fmt.Errorf("create user: %w", err)
+		}
+		if err := h.Redis.LinkIdentity(ctx, user.ID, identity.Provider, identity.ProviderUserID); err != nil {
+			return fmt.Errorf("link identity: %w", err)
+		}
+	} else {
+		// Known identity — refresh display name and avatar from the provider
+		// in case the user has updated their profile since last login.
+		user.Name = identity.Name
+		user.AvatarURL = identity.AvatarURL
+		if err := h.Redis.UpsertUser(ctx, *user); err != nil {
+			return fmt.Errorf("upsert user: %w", err)
+		}
+	}
+
 	signed, err := SignToken(h.SessionSecret)
 	if err != nil {
 		return err
@@ -168,7 +217,7 @@ func (h *Handler) createSession(ctx context.Context, w http.ResponseWriter, user
 	if err != nil {
 		return err
 	}
-	if err := h.Redis.SetSession(ctx, token, user); err != nil {
+	if err := h.Redis.SetSession(ctx, token, *user); err != nil {
 		return err
 	}
 	SetCookie(w, signed)
@@ -217,8 +266,8 @@ func (h *Handler) exchangeGitHubCode(ctx context.Context, code string) (string, 
 }
 
 // fetchGitHubUser retrieves the authenticated user's profile and primary
-// verified email from the GitHub API.
-func (h *Handler) fetchGitHubUser(ctx context.Context, accessToken string) (*model.User, error) {
+// verified email from the GitHub API, and returns it as an oauthIdentity.
+func (h *Handler) fetchGitHubUser(ctx context.Context, accessToken string) (*oauthIdentity, error) {
 	var ghUser struct {
 		ID        int64  `json:"id"`
 		Login     string `json:"login"`
@@ -256,12 +305,12 @@ func (h *Handler) fetchGitHubUser(ctx context.Context, accessToken string) (*mod
 		}
 	}
 
-	return &model.User{
-		ID:        fmt.Sprintf("github:%d", ghUser.ID),
-		Name:      name,
-		Email:     strings.ToLower(strings.TrimSpace(email)),
-		AvatarURL: ghUser.AvatarURL,
-		Provider:  "github",
+	return &oauthIdentity{
+		Provider:       "github",
+		ProviderUserID: fmt.Sprintf("%d", ghUser.ID),
+		Name:           name,
+		AvatarURL:      ghUser.AvatarURL,
+		Email:          strings.ToLower(strings.TrimSpace(email)),
 	}, nil
 }
 

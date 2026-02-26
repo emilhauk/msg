@@ -134,6 +134,7 @@ func main() {
 	mux.Handle("GET /rooms/{id}/messages", authMW(http.HandlerFunc(messagesHandler.HandleHistory)))
 	mux.Handle("GET /rooms/{id}/events", authMW(http.HandlerFunc(sseHandler.HandleSSE)))
 	mux.Handle("DELETE /rooms/{id}/messages/{msgID}", authMW(http.HandlerFunc(messagesHandler.HandleDelete)))
+	mux.Handle("PATCH /rooms/{id}/messages/{msgID}", authMW(http.HandlerFunc(messagesHandler.HandleEdit)))
 	mux.Handle("POST /rooms/{id}/messages/{msgID}/reactions", authMW(http.HandlerFunc(reactionsHandler.HandleToggle)))
 
 	// Media upload — only available when S3 is configured.

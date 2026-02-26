@@ -499,6 +499,29 @@ img { display: block; max-width: 100%; }
   color: var(--color-text-muted);
 }
 
+.message__edited {
+  font-size: .7rem;
+  color: var(--color-text-muted);
+  font-style: italic;
+  opacity: .75;
+}
+
+.message__edit {
+  opacity: 0;
+  color: var(--color-text-muted);
+  transition: opacity .15s, color .15s;
+  align-self: center;
+}
+
+.message:hover .message__edit,
+.message__edit:focus-visible {
+  opacity: 1;
+}
+
+.message__edit:hover {
+  color: var(--color-primary);
+}
+
 .message__delete {
   margin-left: auto;
   opacity: 0;
@@ -532,6 +555,40 @@ img { display: block; max-width: 100%; }
   line-height: 1.55;
   word-break: break-word;
   white-space: pre-wrap;
+}
+
+/* ============================================================
+   Inline message edit form
+   ============================================================ */
+.message-edit-form {
+  margin-top: .25rem;
+}
+
+.message-edit-form__textarea {
+  width: 100%;
+  resize: none;
+  border: 1px solid var(--color-primary);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+  font-family: inherit;
+  font-size: .9375rem;
+  line-height: 1.55;
+  color: var(--color-text);
+  padding: .375rem .625rem;
+  outline: none;
+  overflow-y: auto;
+  transition: border-color .15s;
+}
+
+.message-edit-form__textarea:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-primary) 20%, transparent);
+}
+
+.message-edit-form__actions {
+  display: flex;
+  gap: .375rem;
+  margin-top: .375rem;
 }
 
 /* ============================================================

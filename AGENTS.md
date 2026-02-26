@@ -126,18 +126,30 @@ GET  /static/chroma.css                    — generated syntax-highlight CSS
 ## Redis Key Schema
 
 ```
-sessions:{token}              Hash    id, name, avatar_url, provider; TTL 90 days
-oauth:state:{state}           String  CSRF state; TTL 10 min (consumed on use)
-users:{id}                    Hash    id, name, avatar_url, provider (no TTL)
-rooms                         ZSet    room IDs scored by creation time (unix seconds)
-rooms:{id}                    Hash    id, name
-rooms:{id}:messages           ZSet    message IDs scored by created_at (unix ms); cleaned on write
-rooms:{id}:events             Pub/Sub SSE fan-out channel
-messages:{msg-id}             Hash    id, room_id, user_id, text, attachments (JSON), created_at (ms); TTL 30 days
-reactions:{msg-id}            Hash    emoji → count; TTL 30 days
-reactions:{msg-id}:users      Hash    "{emoji}\x00{userID}" → "1"; TTL 30 days
-unfurls:{sha256-of-url}       String  JSON Unfurl or "null"; TTL 24h (success) / 15 min (failure)
+sessions:{token}                        Hash    id, name, avatar_url; TTL 90 days
+oauth:state:{state}                     String  CSRF state; TTL 10 min (consumed on use)
+users:{uuid}                            Hash    id, name, avatar_url, email, created_at (no TTL)
+users:{uuid}:identities                 Set     "{provider}:{providerUserID}" members (no TTL)
+identities:{provider}:{providerUserID}  String  canonical uuid (no TTL)
+rooms                                   ZSet    room IDs scored by creation time (unix seconds)
+rooms:{id}                              Hash    id, name
+rooms:{id}:messages                     ZSet    message IDs scored by created_at (unix ms); cleaned on write
+rooms:{id}:events                       Pub/Sub SSE fan-out channel
+messages:{msg-id}                       Hash    id, room_id, user_id, text, attachments (JSON), created_at (ms); TTL 30 days
+reactions:{msg-id}                      Hash    emoji → count; TTL 30 days
+reactions:{msg-id}:users                Hash    "{emoji}\x00{userID}" → "1"; TTL 30 days
+unfurls:{sha256-of-url}                 String  JSON Unfurl or "null"; TTL 24h (success) / 15 min (failure)
 ```
+
+### Identity model
+
+`user_id` stored in messages, reactions, and sessions is always a **UUID v4** (the canonical user ID). OAuth provider identities (e.g. `github:12345678`) live only in the `identities:` and `users:{uuid}:identities` keys and are never used as a user identifier elsewhere.
+
+- `users:{uuid}` has no `provider` field — provider is identity-level, not user-level.
+- Name and avatar are seeded from the first provider login and refreshed on each subsequent login via the same provider.
+- Email is seeded from the first provider login and **never overwritten automatically**. Manual change will be possible via a future profile page.
+- Email is **sensitive**: it must only be exposed by profile-page endpoints (not yet implemented). Do not include it in session hashes, SSE payloads, or any response not explicitly scoped to the authenticated user's own profile.
+- Linking a second provider is done explicitly by a logged-in user (via `redis.LinkIdentity`); there is no automatic email-based merge.
 
 ---
 
