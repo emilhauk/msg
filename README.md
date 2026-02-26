@@ -49,6 +49,11 @@ Fill in `.env`:
 | `OPEN_REGISTRATION` | `true` = anyone may log in; `false` (default) = allowlist only |
 | `ALLOW_LIST` | Comma-separated emails allowed when `OPEN_REGISTRATION=false` |
 | `MICROLINK_API_KEY` | Optional — only needed above the free tier |
+| `S3_ENDPOINT` | S3-compatible endpoint, e.g. `https://s3.example.com` — omit to disable media uploads |
+| `S3_BUCKET` | Bucket name for uploaded media |
+| `S3_REGION` | Region string (MinIO accepts any value, e.g. `us-east-1`) |
+| `S3_ACCESS_KEY_ID` | S3 access key ID |
+| `S3_SECRET_ACCESS_KEY` | S3 secret access key |
 
 OAuth callback URLs to register with each provider:
 
@@ -58,7 +63,62 @@ http://localhost:8080/auth/google/callback
 http://localhost:8080/auth/discord/callback
 ```
 
-### 3. Run
+### 3. Configure media uploads (optional)
+
+Media uploads (paste to send images/video) require an S3-compatible object store such as [MinIO](https://min.io/). The steps below use [`mc`](https://min.io/docs/minio/linux/reference/minio-mc.html) (the MinIO CLI client) and assume:
+
+- MinIO is reachable at `https://s3.example.com`
+- The app is at `https://msg.example.com`
+
+**Install `mc`:**
+
+```sh
+# macOS
+brew install minio/stable/mc
+
+# Linux
+curl https://dl.min.io/client/mc/release/linux-amd64/mc \
+  -o /usr/local/bin/mc && chmod +x /usr/local/bin/mc
+```
+
+> On Arch Linux the package is `mcli` (naming conflict with Midnight Commander). Set `MC_CONFIG_DIR="${XDG_CONFIG_HOME}/mc"` to keep config out of `~/.mc`.
+
+**Register your MinIO instance as an alias:**
+
+```sh
+mc alias set myminio https://s3.example.com ACCESS_KEY_ID SECRET_ACCESS_KEY
+```
+
+**Create the bucket and make it publicly readable:**
+
+```sh
+mc mb myminio/msg-media
+mc anonymous set download myminio/msg-media
+```
+
+**Apply the CORS policy** 
+
+For MinIO; this can be done by setting the env var:
+```yaml
+service:
+  storage:
+    environment:
+      MINIO_API_CORS_ALLOWED_ORIGINS: "http://localhost:8080"
+```
+
+**Add to `.env`:**
+
+```sh
+S3_ENDPOINT=https://s3.example.com
+S3_BUCKET=msg-media
+S3_REGION=us-east-1
+S3_ACCESS_KEY_ID=your_access_key_id
+S3_SECRET_ACCESS_KEY=your_secret_access_key
+```
+
+`S3_REGION` can be any non-empty string; MinIO ignores it. If `S3_ENDPOINT` is not set the upload route is not registered and the paste-to-upload handler silently does nothing.
+
+### 4. Run
 
 ```sh
 export $(grep -v '^#' .env | xargs)

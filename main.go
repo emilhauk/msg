@@ -16,6 +16,7 @@ import (
 	"github.com/emilhauk/chat/internal/middleware"
 	"github.com/emilhauk/chat/internal/model"
 	redisclient "github.com/emilhauk/chat/internal/redis"
+	"github.com/emilhauk/chat/internal/storage"
 	"github.com/emilhauk/chat/internal/tmpl"
 )
 
@@ -63,6 +64,21 @@ func main() {
 		log.Fatalf("parse templates: %v", err)
 	}
 	renderer.BuildVersion = buildVersion
+
+	// S3 / media storage (optional — upload routes are only registered when configured).
+	var s3Client *storage.S3Client
+	if ep := envOrDefault("S3_ENDPOINT", ""); ep != "" {
+		s3Client, err = storage.NewS3Client(storage.Config{
+			Endpoint:        ep,
+			Bucket:          envOrDefault("S3_BUCKET", ""),
+			Region:          envOrDefault("S3_REGION", "us-east-1"),
+			AccessKeyID:     envOrDefault("S3_ACCESS_KEY_ID", ""),
+			SecretAccessKey: envOrDefault("S3_SECRET_ACCESS_KEY", ""),
+		})
+		if err != nil {
+			log.Fatalf("connect to S3: %v", err)
+		}
+	}
 
 	// Handlers.
 	authHandler := &auth.Handler{
@@ -118,6 +134,12 @@ func main() {
 	mux.Handle("GET /rooms/{id}/messages", authMW(http.HandlerFunc(messagesHandler.HandleHistory)))
 	mux.Handle("GET /rooms/{id}/events", authMW(http.HandlerFunc(sseHandler.HandleSSE)))
 	mux.Handle("POST /rooms/{id}/messages/{msgID}/reactions", authMW(http.HandlerFunc(reactionsHandler.HandleToggle)))
+
+	// Media upload — only available when S3 is configured.
+	if s3Client != nil {
+		uploadHandler := &handler.UploadHandler{S3: s3Client}
+		mux.Handle("GET /rooms/{id}/upload-url", authMW(http.HandlerFunc(uploadHandler.HandlePresignURL)))
+	}
 
 	addr := ":" + port
 	fmt.Printf("listening on %s\n", addr)

@@ -41,32 +41,47 @@
     </header>
 
     <div class="message-list" id="message-list">
-      {{/* Infinite scroll sentinel */}}
-      {{if .Data.OldestMS}}
-      <div class="scroll-sentinel"
-           hx-get="/rooms/{{.Data.Room.ID}}/messages?before={{.Data.OldestMS}}&limit=50"
-           hx-trigger="revealed"
-           hx-swap="beforebegin"></div>
-      {{end}}
+      <div id="message-list-content">
+        {{/* Infinite scroll sentinel */}}
+        {{if .Data.OldestMS}}
+        <div class="scroll-sentinel"
+             hx-get="/rooms/{{.Data.Room.ID}}/messages?before={{.Data.OldestMS}}&limit=50"
+             hx-trigger="revealed"
+             hx-swap="beforebegin"></div>
+        {{end}}
 
-      {{range .Data.Messages}}
-        {{template "message.html" .}}
-      {{end}}
+        {{range .Data.Messages}}
+          {{template "message.html" .}}
+        {{end}}
 
-      {{/* SSE target: new messages appended here */}}
-      <div id="sse-message-target"
-           hx-swap="beforebegin"
-           sse-swap="message"></div>
+        {{/* SSE target: new messages appended here */}}
+        <div id="sse-message-target"
+             hx-swap="beforebegin"
+             sse-swap="message"></div>
+      </div>
     </div>
 
     {{/* Emoji shortcode autocomplete dropdown */}}
     <ul id="emoji-autocomplete" class="emoji-autocomplete" role="listbox" aria-label="Emoji suggestions" hidden></ul>
 
+    {{/* Drag-and-drop overlay — shown while a file drag is over the room column */}}
+    <div id="drop-overlay" class="drop-overlay" aria-hidden="true" hidden>
+      <span class="drop-overlay__label">Drop files here</span>
+    </div>
+
     <form class="message-form"
           hx-post="/rooms/{{.Data.Room.ID}}/messages"
           hx-swap="none"
           hx-on::after-request="this.reset()">
+      <div id="attachment-previews" class="attachment-previews"></div>
+      <input type="hidden" name="attachments" id="attachment-input" value="">
+      <input type="file" id="file-input" accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm" multiple hidden>
       <div class="message-form__bar">
+        <button type="button" class="btn btn--icon message-form__attach-btn" data-attach-trigger aria-label="Attach file">
+          <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/>
+          </svg>
+        </button>
         <button type="button" class="btn btn--icon message-form__emoji-btn" data-emoji-toggle aria-label="Emoji picker">
           <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <circle cx="12" cy="12" r="10"/>
@@ -99,23 +114,55 @@
   // determine which reaction pills should be marked as active.
   var __currentUserID = {{.Data.User.ID | printf "%q"}};
 
-  // Auto-scroll to bottom on initial load — instant, no animation.
+  // ---- Scroll management ----
+  // userScrolledUp is set to true only by an explicit user scroll gesture
+  // that moves more than half a viewport from the bottom. This decouples
+  // "user deliberately scrolled up" from "there happens to be distance from
+  // the bottom right now" (which is always true while images are still loading).
   (function () {
-    const list = document.getElementById('message-list');
+    const list    = document.getElementById('message-list');
+    const content = document.getElementById('message-list-content');
     if (!list) return;
-    list.style.scrollBehavior = 'auto';
-    list.scrollTop = list.scrollHeight;
-    list.style.scrollBehavior = '';
-  }());
 
-  // Auto-scroll to bottom when a new SSE message arrives, but only if
-  // the user is already near the bottom.
-  document.body.addEventListener('htmx:sseMessage', function () {
-    const list = document.getElementById('message-list');
-    if (!list) return;
-    const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 120;
-    if (nearBottom) list.scrollTop = list.scrollHeight;
-  });
+    var userScrolledUp = false;
+
+    // Snap to bottom instantly (no smooth animation so repeated ResizeObserver
+    // callbacks can't race with an in-progress smooth scroll).
+    function snapToBottom() {
+      list.scrollTop = list.scrollHeight;
+    }
+
+    function snapUnlessScrolledUp() {
+      if (!userScrolledUp) snapToBottom();
+    }
+
+    // Track deliberate user scrolling. Only flip the flag on actual scroll
+    // events — not on programmatic scrollTop assignments.
+    list.addEventListener('scroll', function () {
+      const dist = list.scrollHeight - list.scrollTop - list.clientHeight;
+      const threshold = list.clientHeight / 2;
+      if (dist >= threshold) {
+        userScrolledUp = true;
+      } else {
+        // Scrolled back close to the bottom — resume auto-scroll.
+        userScrolledUp = false;
+      }
+    }, { passive: true });
+
+    // Initial snap on page load.
+    snapToBottom();
+
+    // ResizeObserver on the inner content wrapper fires whenever images,
+    // videos, or unfurl cards load and expand the layout — which is invisible
+    // to an observer on the scrollable container itself.
+    if (content && typeof ResizeObserver !== 'undefined') {
+      new ResizeObserver(snapUnlessScrolledUp).observe(content);
+    }
+
+    // Fast path for text-only SSE messages: they insert a new DOM node but
+    // produce no resize event on the content wrapper until the node is painted.
+    document.body.addEventListener('htmx:sseMessage', snapUnlessScrolledUp);
+  }());
 
   // Auto-resize textarea; reset height when the form is cleared.
   (function () {
@@ -127,10 +174,246 @@
     });
     ta.closest('form').addEventListener('reset', function () {
       ta.style.height = '';
-      const list = document.getElementById('message-list');
-      if (!list) return;
-      const nearBottom = list.scrollHeight - list.scrollTop - list.clientHeight < 120;
-      if (nearBottom) requestAnimationFrame(function () { list.scrollTop = list.scrollHeight; });
+    });
+  }());
+
+  // ---- Media upload (paste + drag-and-drop) ----
+  // Shared upload logic for both paste and drag-drop. Uploads files directly
+  // to S3 via a presigned PUT URL and queues them as attachment chips on the form.
+  (function () {
+    var ALLOWED_TYPES = {
+      'image/jpeg': true, 'image/png': true, 'image/gif': true, 'image/webp': true,
+      'video/mp4': true, 'video/webm': true
+    };
+    var roomID = '{{.Data.Room.ID}}';
+    var ta           = document.querySelector('.message-form__textarea');
+    var form         = document.querySelector('.message-form');
+    var previewsEl   = document.getElementById('attachment-previews');
+    var inputEl      = document.getElementById('attachment-input');
+    var fileInput    = document.getElementById('file-input');
+    if (!ta || !form || !previewsEl || !inputEl) return;
+
+    var pendingAttachments = []; // [{url, content_type, filename}]
+    var uploadCount = 0;         // number of uploads currently in-flight
+
+    function syncInput() {
+      inputEl.value = pendingAttachments.length ? JSON.stringify(pendingAttachments) : '';
+    }
+
+    function setSendDisabled(disabled) {
+      var btn = form.querySelector('.message-form__send');
+      if (btn) btn.disabled = disabled;
+    }
+
+    // Generate a 12-character random hex string to use as the file's key stem.
+    function randomHex(len) {
+      var arr = new Uint8Array(Math.ceil(len / 2));
+      crypto.getRandomValues(arr);
+      return Array.from(arr, function (b) { return b.toString(16).padStart(2, '0'); }).join('').slice(0, len);
+    }
+
+    // Build a preview chip element for a pending upload.
+    // Shows a thumbnail (images) or a video icon; no filename label.
+    function makeChip(contentType, objectURL) {
+      var chip = document.createElement('div');
+      chip.className = 'attachment-chip';
+
+      if (contentType.startsWith('image/')) {
+        var thumb = document.createElement('img');
+        thumb.src = objectURL;
+        thumb.alt = '';
+        chip.appendChild(thumb);
+      } else {
+        var icon = document.createElement('span');
+        icon.className = 'attachment-chip__icon';
+        icon.textContent = '\uD83C\uDFA5'; // 🎥
+        chip.appendChild(icon);
+      }
+
+      var spinner = document.createElement('span');
+      spinner.className = 'attachment-chip__spinner';
+      chip.appendChild(spinner);
+
+      var removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'attachment-chip__remove';
+      removeBtn.setAttribute('aria-label', 'Remove attachment');
+      removeBtn.textContent = '\u00D7'; // ×
+      removeBtn.addEventListener('click', function () {
+        var idx = parseInt(chip.dataset.attachmentIdx, 10);
+        if (!isNaN(idx)) {
+          pendingAttachments.splice(idx, 1);
+          // Re-index remaining chips.
+          var chips = previewsEl.querySelectorAll('.attachment-chip[data-attachment-idx]');
+          var counter = 0;
+          chips.forEach(function (c) { c.dataset.attachmentIdx = counter++; });
+          syncInput();
+        }
+        chip.remove();
+        if (previewsEl.children.length === 0) previewsEl.hidden = true;
+      });
+      chip.appendChild(removeBtn);
+
+      previewsEl.hidden = false;
+      previewsEl.appendChild(chip);
+      return chip;
+    }
+
+    // Upload a single File object: presign → PUT → chip.
+    // Shared by paste, drag-drop, and file-picker handlers.
+    function uploadFile(file) {
+      var objectURL = URL.createObjectURL(file);
+      var chip = makeChip(file.type, objectURL);
+
+      uploadCount++;
+      setSendDisabled(true);
+
+      var hash = randomHex(12);
+      var params = new URLSearchParams({
+        hash: hash,
+        content_type: file.type,
+        content_length: file.size
+      });
+
+      fetch('/rooms/' + roomID + '/upload-url?' + params, { credentials: 'same-origin' })
+        .then(function (r) {
+          if (!r.ok) throw new Error('presign failed: ' + r.status);
+          return r.json();
+        })
+        .then(function (data) {
+          return fetch(data.upload_url, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type },
+            body: file
+          }).then(function (r) {
+            if (!r.ok) throw new Error('upload failed: ' + r.status);
+            return data.public_url;
+          });
+        })
+        .then(function (publicURL) {
+          var idx = pendingAttachments.length;
+          pendingAttachments.push({ url: publicURL, content_type: file.type, filename: hash });
+          chip.dataset.attachmentIdx = idx;
+          syncInput();
+          chip.classList.add('attachment-chip--done');
+          chip.querySelector('.attachment-chip__spinner').remove();
+        })
+        .catch(function () {
+          chip.classList.add('attachment-chip--error');
+          var spinner = chip.querySelector('.attachment-chip__spinner');
+          if (spinner) spinner.remove();
+        })
+        .finally(function () {
+          URL.revokeObjectURL(objectURL);
+          uploadCount--;
+          if (uploadCount === 0) setSendDisabled(false);
+        });
+    }
+
+    // ---- File picker button ----
+    // Clicking the paperclip button opens the native OS / mobile file picker.
+    var attachBtn = document.querySelector('[data-attach-trigger]');
+    if (attachBtn && fileInput) {
+      attachBtn.addEventListener('click', function () { fileInput.click(); });
+      fileInput.addEventListener('change', function () {
+        Array.from(fileInput.files || []).forEach(function (file) {
+          if (ALLOWED_TYPES[file.type]) uploadFile(file);
+        });
+        // Reset so selecting the same file again triggers another change event.
+        fileInput.value = '';
+      });
+    }
+
+    // ---- Paste handler ----
+    ta.addEventListener('paste', function (e) {
+      var items = Array.from((e.clipboardData || {}).items || []);
+      var mediaItems = items.filter(function (i) {
+        return i.kind === 'file' && ALLOWED_TYPES[i.type];
+      });
+      if (mediaItems.length === 0) return;
+
+      // Prevent the browser pasting binary data as text into the textarea.
+      e.preventDefault();
+
+      mediaItems.forEach(function (item) {
+        var file = item.getAsFile();
+        if (!file) return;
+        uploadFile(file);
+      });
+    });
+
+    // ---- Drag-and-drop handler ----
+    // Target: the full .room-main column (message list + compose area).
+    (function () {
+      var roomMain = document.querySelector('.room-main');
+      var overlay  = document.getElementById('drop-overlay');
+      if (!roomMain || !overlay) return;
+
+      // Track enter/leave depth to avoid flicker when crossing child elements.
+      var dragDepth = 0;
+
+      function hasDragFiles(e) {
+        var types = e.dataTransfer && e.dataTransfer.types;
+        if (!types) return false;
+        // types is a DOMStringList or Array depending on browser.
+        return Array.prototype.indexOf.call(types, 'Files') >= 0;
+      }
+
+      function showOverlay() {
+        overlay.removeAttribute('hidden');
+        // rAF so the hidden→visible transition plays.
+        requestAnimationFrame(function () {
+          overlay.classList.add('drop-overlay--active');
+        });
+      }
+
+      function hideOverlay() {
+        overlay.classList.remove('drop-overlay--active');
+        overlay.setAttribute('hidden', '');
+        dragDepth = 0;
+      }
+
+      roomMain.addEventListener('dragenter', function (e) {
+        if (!hasDragFiles(e)) return;
+        e.preventDefault();
+        dragDepth++;
+        if (dragDepth === 1) showOverlay();
+      });
+
+      roomMain.addEventListener('dragover', function (e) {
+        if (!hasDragFiles(e)) return;
+        e.preventDefault();
+        // Signal to the OS that we accept a copy (not a move).
+        e.dataTransfer.dropEffect = 'copy';
+      });
+
+      roomMain.addEventListener('dragleave', function (e) {
+        dragDepth--;
+        if (dragDepth <= 0) hideOverlay();
+      });
+
+      roomMain.addEventListener('drop', function (e) {
+        e.preventDefault();
+        hideOverlay();
+
+        var files = Array.from((e.dataTransfer && e.dataTransfer.files) || []);
+        files.forEach(function (file) {
+          if (ALLOWED_TYPES[file.type]) uploadFile(file);
+        });
+
+        // Focus the textarea so the user can type a caption immediately.
+        if (ta) ta.focus();
+      });
+    }());
+
+    // Clear attachments when the form resets (fires after successful HTMX send).
+    form.addEventListener('reset', function () {
+      pendingAttachments = [];
+      syncInput();
+      previewsEl.innerHTML = '';
+      previewsEl.hidden = true;
+      setSendDisabled(false);
+      uploadCount = 0;
     });
   }());
 
@@ -382,10 +665,9 @@
       const html  = e.data.slice(colon + 1);
       const target = document.getElementById('preview-' + msgId);
       if (target) {
-        const list = document.getElementById('message-list');
-        const nearBottom = list && list.scrollHeight - list.scrollTop - list.clientHeight < 120;
+        // Just set the HTML — the ResizeObserver will handle scrolling when
+        // the unfurl image loads and the list grows.
         target.innerHTML = html;
-        if (nearBottom) requestAnimationFrame(function () { list.scrollTop = list.scrollHeight; });
       }
     });
 

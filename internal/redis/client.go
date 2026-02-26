@@ -149,6 +149,7 @@ func (c *Client) SaveMessage(ctx context.Context, msg model.Message) error {
 		"user_id", msg.UserID,
 		"text", msg.Text,
 		"created_at", msStr,
+		"attachments", msg.AttachmentsJSON,
 	)
 	pipe.Expire(ctx, "messages:"+msg.ID, messageTTL)
 	pipe.ZAdd(ctx, "rooms:"+msg.RoomID+":messages", goredis.Z{Score: ms, Member: msg.ID})
@@ -168,14 +169,19 @@ func (c *Client) GetMessage(ctx context.Context, id string) (*model.Message, err
 		return nil, err
 	}
 	ms, _ := strconv.ParseInt(vals["created_at"], 10, 64)
-	return &model.Message{
-		ID:          vals["id"],
-		RoomID:      vals["room_id"],
-		UserID:      vals["user_id"],
-		Text:        vals["text"],
-		CreatedAtMS: vals["created_at"],
-		CreatedAt:   time.UnixMilli(ms),
-	}, nil
+	msg := &model.Message{
+		ID:              vals["id"],
+		RoomID:          vals["room_id"],
+		UserID:          vals["user_id"],
+		Text:            vals["text"],
+		CreatedAtMS:     vals["created_at"],
+		CreatedAt:       time.UnixMilli(ms),
+		AttachmentsJSON: vals["attachments"],
+	}
+	if msg.AttachmentsJSON != "" && msg.AttachmentsJSON != "null" {
+		_ = json.Unmarshal([]byte(msg.AttachmentsJSON), &msg.Attachments)
+	}
+	return msg, nil
 }
 
 // GetLatestMessages returns up to limit messages, newest-score first, then reversed for display.

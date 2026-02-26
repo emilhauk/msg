@@ -2,6 +2,7 @@ package handler
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -34,21 +35,48 @@ func (h *MessagesHandler) HandlePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	text := strings.TrimSpace(r.FormValue("text"))
-	if text == "" {
+
+	// Parse attachments submitted as a JSON array from the paste upload flow.
+	var attachments []model.Attachment
+	if raw := strings.TrimSpace(r.FormValue("attachments")); raw != "" && raw != "null" && raw != "[]" {
+		if err := json.Unmarshal([]byte(raw), &attachments); err != nil {
+			http.Error(w, "invalid attachments", http.StatusBadRequest)
+			return
+		}
+		// Validate each attachment URL is non-empty (no origin check here;
+		// the presign handler controls what keys are created).
+		for _, a := range attachments {
+			if a.URL == "" || !allowedContentTypes[a.ContentType] {
+				http.Error(w, "invalid attachment", http.StatusBadRequest)
+				return
+			}
+		}
+	}
+
+	// A message must have either text or at least one attachment.
+	if text == "" && len(attachments) == 0 {
 		w.WriteHeader(http.StatusOK) // no-op
 		return
+	}
+
+	var attachmentsJSON string
+	if len(attachments) > 0 {
+		b, _ := json.Marshal(attachments)
+		attachmentsJSON = string(b)
 	}
 
 	now := time.Now()
 	msgID := fmt.Sprintf("%d-%s", now.UnixMilli(), user.ID)
 	msg := model.Message{
-		ID:          msgID,
-		RoomID:      roomID,
-		UserID:      user.ID,
-		Text:        text,
-		CreatedAt:   now,
-		CreatedAtMS: strconv.FormatInt(now.UnixMilli(), 10),
-		User:        user,
+		ID:              msgID,
+		RoomID:          roomID,
+		UserID:          user.ID,
+		Text:            text,
+		CreatedAt:       now,
+		CreatedAtMS:     strconv.FormatInt(now.UnixMilli(), 10),
+		User:            user,
+		Attachments:     attachments,
+		AttachmentsJSON: attachmentsJSON,
 	}
 
 	if err := h.Redis.SaveMessage(r.Context(), msg); err != nil {

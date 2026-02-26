@@ -14,7 +14,22 @@
         {{.CreatedAt.Format "15:04"}}
       </time>
     </div>
-    <div class="message__text">{{renderText .Text}}</div>
+    {{if .Text}}<div class="message__text">{{renderText .Text}}</div>{{end}}
+    {{if .Attachments}}
+    <div class="message__attachments">
+      {{range .Attachments}}
+        {{if isImageType .ContentType}}
+        <a href="{{.URL}}" target="_blank" rel="noopener noreferrer">
+          <img class="message__media-img" src="{{.URL}}" alt="{{.Filename}}" loading="lazy">
+        </a>
+        {{else if isVideoType .ContentType}}
+        <video class="message__media-video" controls preload="metadata">
+          <source src="{{.URL}}" type="{{.ContentType}}">
+        </video>
+        {{end}}
+      {{end}}
+    </div>
+    {{end}}
     <div id="preview-{{.ID}}">
     {{if .Unfurl}}
       <div class="unfurl">

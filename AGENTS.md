@@ -34,6 +34,7 @@ Go HTTP Server
   │                      GET /rooms/{id}
   ├─ Message handlers    POST /rooms/{id}/messages
   │                      GET  /rooms/{id}/messages?before=<timestamp-ms>&limit=50
+  ├─ Upload handler      GET /rooms/{id}/upload-url (presigned PUT URL; only when S3_ENDPOINT is set)
   └─ SSE endpoint        GET /rooms/{id}/events
        │
        ▼
@@ -43,7 +44,7 @@ Redis
   ├─ rooms                     ZSet    – room IDs sorted by creation time
   ├─ rooms:{id}                Hash    – id, name
   ├─ rooms:{id}:messages       ZSet    – message IDs scored by Unix timestamp (ms)
-  ├─ messages:{msg-id}         Hash    – id, room_id, user_id, text, created_at; TTL 30 days
+  ├─ messages:{msg-id}         Hash    – id, room_id, user_id, text, attachments (JSON), created_at; TTL 30 days
   ├─ rooms:{id}:events         Pub/Sub – new message / unfurl notifications
   └─ unfurls:{url-sha256}      String  – Microlink JSON result; TTL 24h (success), 15 min (failure)
 ```
@@ -65,6 +66,7 @@ Redis
 │   ├── handler/
 │   │   ├── rooms.go         # GET / → redirect to /rooms/bemro; GET /rooms/{id}
 │   │   ├── messages.go      # POST /rooms/{id}/messages; GET /rooms/{id}/messages (paginated history)
+│   │   ├── upload.go        # GET /rooms/{id}/upload-url — presigned S3 PUT URL
 │   │   └── sse.go           # SSE endpoint, fan-out via Redis Pub/Sub
 │   ├── middleware/
 │   │   └── auth.go          # Session validation middleware
@@ -72,6 +74,8 @@ Redis
 │   │   └── types.go         # User, Room, Message structs
 │   ├── redis/
 │   │   └── client.go        # Redis connection and typed helpers
+│   ├── storage/
+│   │   └── s3.go            # S3-compatible media storage (presign, public URL)
 │   └── tmpl/
 │       └── render.go        # Template rendering helpers
 └── web/
@@ -108,6 +112,11 @@ Redis
   DISCORD_CLIENT_ID
   DISCORD_CLIENT_SECRET
   MICROLINK_API_KEY      optional; only required if exceeding the free tier
+  S3_ENDPOINT            S3-compatible endpoint e.g. https://s3.example.com; omit to disable media uploads
+  S3_BUCKET              bucket name for uploaded media
+  S3_REGION              region string (MinIO accepts any value e.g. us-east-1)
+  S3_ACCESS_KEY_ID       S3 access key ID
+  S3_SECRET_ACCESS_KEY   S3 secret access key
   PORT                   default 8080
   OPEN_REGISTRATION      "true" = anyone may log in; "false" (default) = only emails in ALLOW_LIST are permitted
   ALLOW_LIST             comma-separated list of email addresses allowed to log in, e.g. alice@example.com,bob@example.com

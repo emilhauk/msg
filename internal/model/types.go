@@ -26,11 +26,21 @@ type Message struct {
 	CreatedAt time.Time `redis:"-"`
 	// CreatedAtMS is stored in Redis as millisecond unix timestamp string.
 	CreatedAtMS string `redis:"created_at"`
+	// AttachmentsJSON is a JSON-encoded []Attachment stored in Redis.
+	AttachmentsJSON string `redis:"attachments"`
 
-	// Populated from Redis lookups, not stored directly on this hash.
-	User      *User
-	Unfurl    *Unfurl
-	Reactions []Reaction
+	// Populated from Redis lookups or JSON decode; not stored directly.
+	User        *User
+	Unfurl      *Unfurl
+	Reactions   []Reaction
+	Attachments []Attachment
+}
+
+// Attachment represents a media file uploaded to S3 and attached to a message.
+type Attachment struct {
+	URL         string `json:"url"`
+	ContentType string `json:"content_type"`
+	Filename    string `json:"filename"`
 }
 
 // Reaction represents an emoji reaction on a message, with the current user's

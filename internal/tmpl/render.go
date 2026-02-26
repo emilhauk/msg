@@ -166,11 +166,31 @@ func reactionData(msgID, roomID string, reactions []model.Reaction) ReactionsTem
 	}
 }
 
+// isImageType reports whether a MIME type is a supported image type.
+func isImageType(contentType string) bool {
+	switch contentType {
+	case "image/jpeg", "image/png", "image/gif", "image/webp":
+		return true
+	}
+	return false
+}
+
+// isVideoType reports whether a MIME type is a supported video type.
+func isVideoType(contentType string) bool {
+	switch contentType {
+	case "video/mp4", "video/webm":
+		return true
+	}
+	return false
+}
+
 var funcMap = template.FuncMap{
 	"linkify":      linkify,
 	"renderText":   renderText,
 	"presetEmojis": presetEmojis,
 	"reactionData": reactionData,
+	"isImageType":  isImageType,
+	"isVideoType":  isVideoType,
 }
 
 // Renderer holds parsed templates.
