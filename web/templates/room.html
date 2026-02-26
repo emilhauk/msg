@@ -177,6 +177,117 @@
     });
   }());
 
+  // ---- ASCII emoticon → emoji replacement ----
+  // Replaces common ASCII emoticons (e.g. :) :( <3) with their unicode emoji
+  // equivalents. Replacement fires on word boundaries (space / newline) while
+  // typing, and also as a full-text pass just before the form is submitted so
+  // that trailing emoticons (e.g. "hello :)" + Enter) are always converted.
+  (function () {
+    // Map of ASCII emoticon → unicode emoji.  Order matters for the regex:
+    // longer / more specific patterns must come before shorter ones that share
+    // a prefix (e.g. ">:-(" before ">:(", ":'(" before ":(").
+    var EMOTICONS = {
+      '>:-(': '😠', '>:(': '😠',
+      ":'-(": '😢', ":'(": '😢',
+      'O:-)': '😇', 'O:)': '😇',
+      ':-)': '😊', ':)': '😊', ':^)': '😊',
+      ':-D': '😄', ':D': '😄',
+      'XD': '😆', 'xD': '😆',
+      ':-(': '😞', ':(': '😞',
+      ':-P': '😛', ':P': '😛', ':-p': '😛', ':p': '😛',
+      ';-)': '😉', ';)': '😉',
+      ':-O': '😮', ':O': '😮', ':-o': '😮', ':o': '😮',
+      ':-*': '😘', ':*': '😘',
+      ':-|': '😐', ':|': '😐',
+      '8-)': '😎', '8)': '😎', 'B-)': '😎', 'B)': '😎',
+      ':-x': '😶', ':x': '😶',
+      ':3': '🥺',
+      '</3': '💔',
+      '<3': '❤️',
+    };
+
+    // Build a regex that matches any emoticon preceded by a word boundary
+    // (start of string, whitespace, or another emoticon terminator).
+    // Each emoticon is regex-escaped so characters like ( ) | are literal.
+    function escapeRe(s) {
+      return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+    var pattern = new RegExp(
+      '(?:^|(?<=\\s))(' +
+        Object.keys(EMOTICONS).map(escapeRe).join('|') +
+      ')(?=\\s|$)',
+      'g'
+    );
+
+    // Replace all emoticons in a plain string (used for the pre-submit full pass).
+    function replaceAllEmoticons(text) {
+      return text.replace(pattern, function (m) { return EMOTICONS[m] || m; });
+    }
+
+    // Replace the emoticon immediately to the left of the cursor, if the
+    // character just typed is a word boundary (space or newline).
+    // Returns true if a replacement was made so callers can skip other logic.
+    function replaceAtCursor(ta) {
+      var pos = ta.selectionStart;
+      var val = ta.value;
+      // Only act when the character before the cursor is a word boundary.
+      var trigger = val[pos - 1];
+      if (trigger !== ' ' && trigger !== '\n') return false;
+
+      // Scan backwards from just before the boundary to find a candidate.
+      // We only need to look back as far as the longest emoticon (5 chars).
+      var MAX = 6;
+      var searchStart = Math.max(0, pos - 1 - MAX);
+      var segment = val.slice(searchStart, pos - 1); // text before the space/newline
+
+      // Try each emoticon, longest first (already ordered above).
+      for (var emoticon in EMOTICONS) {
+        if (segment.endsWith(emoticon)) {
+          // Check that the emoticon is at a word boundary on the left too.
+          var emStart = pos - 1 - emoticon.length;
+          if (emStart > 0) {
+            var charBefore = val[emStart - 1];
+            if (charBefore !== ' ' && charBefore !== '\n') continue;
+          }
+          var emoji = EMOTICONS[emoticon];
+          ta.value = val.slice(0, pos - 1 - emoticon.length) + emoji + val.slice(pos - 1);
+          // Reposition cursor after the inserted emoji + the boundary char.
+          var newPos = pos - emoticon.length + emoji.length;
+          ta.selectionStart = ta.selectionEnd = newPos;
+          return true;
+        }
+      }
+      return false;
+    }
+
+    // Main textarea: live replacement on input + full pass before submit.
+    var form = document.querySelector('.message-form');
+    var ta   = form && form.querySelector('.message-form__textarea');
+    if (ta) {
+      ta.addEventListener('input', function () { replaceAtCursor(this); });
+
+      // Full-text pass on submit so a trailing emoticon (no space before Enter)
+      // is always converted even if the live handler didn't fire for it.
+      form.addEventListener('submit', function () {
+        ta.value = replaceAllEmoticons(ta.value);
+      });
+    }
+
+    // Edit textareas: use event delegation (they are created dynamically via SSE).
+    document.addEventListener('input', function (e) {
+      var t = e.target;
+      if (t && t.classList.contains('message-edit-form__textarea')) {
+        replaceAtCursor(t);
+      }
+    });
+    document.addEventListener('submit', function (e) {
+      var editForm = e.target;
+      if (!editForm || !editForm.classList.contains('message-edit-form')) return;
+      var t = editForm.querySelector('.message-edit-form__textarea');
+      if (t) t.value = replaceAllEmoticons(t.value);
+    });
+  }());
+
   // ---- Media upload (paste + drag-and-drop) ----
   // Shared upload logic for both paste and drag-drop. Uploads files directly
   // to S3 via a presigned PUT URL and queues them as attachment chips on the form.
