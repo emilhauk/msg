@@ -90,9 +90,10 @@ func (h *MessagesHandler) HandlePost(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Render and publish via SSE.
-	// All clients receive the message via SSE; the CurrentUserID is embedded so
-	// only the author sees the delete button in their own browser.
-	html, err := h.Renderer.RenderString("message.html", model.MessageView{Message: &msg, CurrentUserID: user.ID})
+	// CurrentUserID is intentionally empty: the HTML is broadcast to every
+	// connected client, so owner-specific controls (edit/delete buttons) must
+	// not be baked in. The client applies them via JS using __currentUserID.
+	html, err := h.Renderer.RenderString("message.html", model.MessageView{Message: &msg, CurrentUserID: ""})
 	if err == nil {
 		_ = h.Redis.Publish(r.Context(), roomID, "msg:"+html)
 	}
@@ -254,11 +255,9 @@ func (h *MessagesHandler) HandleEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Re-render and broadcast. The rendered HTML is neutral (CurrentUserID
-	// is set per-viewer by each client's own session), so we broadcast
-	// with the author's ID — each browser already knows its own user ID
-	// from the JS __currentUserID variable and handles the edit button visibility.
-	html, err := h.Renderer.RenderString("message.html", model.MessageView{Message: msg, CurrentUserID: user.ID})
+	// Re-render and broadcast neutrally (same reasoning as msg: publish above —
+	// the HTML goes to all clients; the client applies owner controls via JS).
+	html, err := h.Renderer.RenderString("message.html", model.MessageView{Message: msg, CurrentUserID: ""})
 	if err == nil {
 		_ = h.Redis.Publish(r.Context(), roomID, "edit:"+msgID+":"+html)
 	}

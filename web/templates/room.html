@@ -111,8 +111,33 @@
 
 <script>
   // Current authenticated user ID — used by the reaction SSE handler to
-  // determine which reaction pills should be marked as active.
+  // determine which reaction pills should be marked as active, and by
+  // applyOwnerControls to show edit/delete buttons on the viewer's own messages.
   var __currentUserID = {{.Data.User.ID | printf "%q"}};
+
+  // applyOwnerControls unhides the edit and delete buttons on a message article
+  // when the current user is the author. Called at page load and after every
+  // SSE message insert or edit replacement so buttons are never baked into the
+  // shared SSE broadcast HTML.
+  function applyOwnerControls(articleEl) {
+    if (!articleEl || articleEl.dataset.authorId !== __currentUserID) return;
+    var editBtn   = articleEl.querySelector('.message__edit');
+    var deleteBtn = articleEl.querySelector('.message__delete');
+    if (editBtn)   editBtn.removeAttribute('hidden');
+    if (deleteBtn) deleteBtn.removeAttribute('hidden');
+  }
+
+  // Apply on all messages already in the DOM at page load.
+  document.querySelectorAll('#message-list-content article.message').forEach(applyOwnerControls);
+
+  // Apply on messages loaded via infinite-scroll history swap.
+  document.body.addEventListener('htmx:afterSwap', function (e) {
+    // The sentinel swaps history HTML beforebegin itself; the inserted nodes
+    // are siblings. We re-scan the whole list to catch all newly added articles.
+    if (e.detail.elt && e.detail.elt.classList && e.detail.elt.classList.contains('scroll-sentinel')) {
+      document.querySelectorAll('#message-list-content article.message').forEach(applyOwnerControls);
+    }
+  });
 
   // ---- Scroll management ----
   // userScrolledUp is set to true only by an explicit user scroll gesture
@@ -165,7 +190,15 @@
 
     // Fast path for text-only SSE messages: they insert a new DOM node but
     // produce no resize event on the content wrapper until the node is painted.
-    document.body.addEventListener('htmx:sseMessage', snapUnlessScrolledUp);
+    // Also apply owner controls on the newly inserted message article.
+    document.body.addEventListener('htmx:sseMessage', function () {
+      snapUnlessScrolledUp();
+      // The newly inserted article is the one immediately before #sse-message-target.
+      var target = document.getElementById('sse-message-target');
+      if (target && target.previousElementSibling) {
+        applyOwnerControls(target.previousElementSibling);
+      }
+    });
   }());
 
   // Auto-resize textarea; reset height when the form is cleared.
@@ -788,7 +821,10 @@
       el.outerHTML = html;
       // Re-process HTMX on the swapped-in element so hx-delete/hx-patch work.
       const newEl = document.getElementById('msg-' + msgId);
-      if (newEl) htmx.process(newEl);
+      if (newEl) {
+        htmx.process(newEl);
+        applyOwnerControls(newEl);
+      }
     });
 
     es.addEventListener('unfurl', function (e) {

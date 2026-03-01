@@ -207,9 +207,13 @@ S3 key format: `rooms/{roomID}/{unixMs}-{userID}/{hash}.{ext}`
 
 ---
 
-## Reaction Broadcast Strategy
+## SSE Broadcast Neutrality
 
-Reactions are broadcast as **neutral HTML** (no `ReactedByMe` baked in for any user) plus the reacting user's emoji list. Each client applies its own active state from a local `__myReactions` map in JS, then calls `htmx.process()` on the swapped element so HTMX re-processes new `hx-post` attributes.
+SSE HTML is sent to **every** connected client verbatim, so it must never contain per-viewer state. Two patterns enforce this:
+
+**Reactions** — broadcast as neutral HTML (no `ReactedByMe` baked in) plus the reacting user's emoji list. Each client applies its own active state from `__myReactions` in JS, then calls `htmx.process()` on the swapped element.
+
+**Owner controls (edit/delete buttons)** — buttons are always rendered in `message.html` but with `hidden` attribute by default. The SSE publish in `HandlePost` and `HandleEdit` always passes `CurrentUserID: ""`. After every DOM insertion (page load, SSE `message` event, SSE `edit` event, infinite-scroll history swap), the client calls `applyOwnerControls(articleEl)` which compares `articleEl.dataset.authorId` against `window.__currentUserID` and removes the `hidden` attribute when they match. This is the same "neutral broadcast + client personalisation" pattern as reactions.
 
 ---
 
