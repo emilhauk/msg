@@ -38,6 +38,7 @@ func main() {
 	port := envOrDefault("PORT", "8080")
 	openRegistration := strings.EqualFold(envOrDefault("OPEN_REGISTRATION", "false"), "true")
 	allowList := parseAllowList(envOrDefault("ALLOW_LIST", ""))
+	enablePasswordLogin := strings.EqualFold(envOrDefault("ENABLE_PASSWORD_LOGIN", "false"), "true")
 
 	sessionSecret, err := hex.DecodeString(sessionSecretHex)
 	if err != nil || len(sessionSecret) == 0 {
@@ -105,6 +106,17 @@ func main() {
 		GitHubClientID:     envOrDefault("GITHUB_CLIENT_ID", ""),
 		GitHubClientSecret: envOrDefault("GITHUB_CLIENT_SECRET", ""),
 	}
+	passwordHandler := &auth.PasswordHandler{
+		Redis:            redis,
+		SessionSecret:    sessionSecret,
+		OpenRegistration: openRegistration,
+		AllowList:        allowList,
+	}
+	if enablePasswordLogin {
+		log.Println("password auth: enabled")
+	} else {
+		log.Println("password auth: disabled (ENABLE_PASSWORD_LOGIN not set)")
+	}
 	roomsHandler := &handler.RoomsHandler{Redis: redis, Renderer: renderer}
 	messagesHandler := &handler.MessagesHandler{
 		Redis:    redis,
@@ -165,14 +177,25 @@ func main() {
 	// Auth routes (no auth required).
 	mux.HandleFunc("GET /login", func(w http.ResponseWriter, r *http.Request) {
 		var errMsg string
-		if r.URL.Query().Get("error") == "access_denied" {
+		switch r.URL.Query().Get("error") {
+		case "access_denied":
 			errMsg = "You are not on the access list. Contact the administrator to request access."
+		case "invalid_credentials":
+			errMsg = "Invalid email or password."
 		}
-		renderer.Render(w, http.StatusOK, "login.html", map[string]any{"ErrorMsg": errMsg})
+		renderer.Render(w, http.StatusOK, "login.html", map[string]any{
+			"ErrorMsg":            errMsg,
+			"PasswordAuthEnabled": enablePasswordLogin,
+		})
 	})
 	mux.HandleFunc("GET /auth/{provider}", authHandler.HandleLogin)
 	mux.HandleFunc("GET /auth/{provider}/callback", authHandler.HandleCallback)
 	mux.HandleFunc("POST /auth/logout", authHandler.HandleLogout)
+
+	// Password auth route — only registered when the feature is enabled.
+	if enablePasswordLogin {
+		mux.HandleFunc("POST /auth/password/login", passwordHandler.HandleLogin)
+	}
 
 	// Protected routes.
 	mux.Handle("GET /", authMW(http.HandlerFunc(roomsHandler.HandleRoot)))

@@ -307,7 +307,6 @@ img { display: block; max-width: 100%; }
   display: flex;
   flex-direction: column;
   gap: .75rem;
-  margin-bottom: 1.5rem;
 }
 
 .login-card__error {
@@ -326,6 +325,68 @@ img { display: block; max-width: 100%; }
   color: var(--color-text-muted);
   text-align: center;
   line-height: 1.5;
+}
+
+.login-card__divider {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  margin: 1.25rem 0;
+  color: var(--color-text-muted);
+  font-size: .8125rem;
+}
+.login-card__divider::before,
+.login-card__divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+
+.login-card__password-form {
+  display: flex;
+  flex-direction: column;
+  gap: .875rem;
+}
+
+/* ============================================================
+   Form fields (login page)
+   ============================================================ */
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: .3rem;
+}
+
+.form-field__label {
+  font-size: .8125rem;
+  font-weight: 500;
+  color: var(--color-text-muted);
+}
+
+.form-field__input {
+  width: 100%;
+  padding: .625rem .75rem;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  font-family: inherit;
+  font-size: .9375rem;
+  color: var(--color-text);
+  outline: none;
+  transition: border-color .15s, box-shadow .15s;
+}
+.form-field__input::placeholder { color: var(--color-text-muted); opacity: .6; }
+.form-field__input:focus {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-primary) 18%, transparent);
+}
+
+.login-card__password-form .btn {
+  width: 100%;
+  padding: .75rem 1.25rem;
+  font-size: .9375rem;
+  margin-top: .125rem;
 }
 
 /* ============================================================

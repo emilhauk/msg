@@ -5,6 +5,7 @@ go 1.25.7
 require (
 	github.com/alecthomas/chroma/v2 v2.23.1
 	github.com/redis/go-redis/v9 v9.18.0
+	golang.org/x/crypto v0.31.0
 )
 
 require (
@@ -34,5 +35,5 @@ require (
 	github.com/golang-jwt/jwt/v5 v5.2.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
-	golang.org/x/crypto v0.31.0 // indirect
+	golang.org/x/crypto v0.31.0
 )

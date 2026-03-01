@@ -150,6 +150,42 @@ func (c *Client) GetUserByIdentity(ctx context.Context, provider, providerUserID
 	return c.GetUser(ctx, canonicalID)
 }
 
+// GetUserByEmail looks up the canonical user UUID stored in the email index,
+// then retrieves the full user record. Returns nil without error when no user
+// with that email address has been registered via password auth.
+func (c *Client) GetUserByEmail(ctx context.Context, email string) (*model.User, error) {
+	canonicalID, err := c.rdb.Get(ctx, "email_index:"+email).Result()
+	if err == goredis.Nil {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, fmt.Errorf("redis: get email index: %w", err)
+	}
+	return c.GetUser(ctx, canonicalID)
+}
+
+// SetEmailIndex writes email_index:{email} → userID. This is used exclusively
+// by password-auth account creation so that users can be looked up by email at
+// login time.
+func (c *Client) SetEmailIndex(ctx context.Context, email, userID string) error {
+	return c.rdb.Set(ctx, "email_index:"+email, userID, 0).Err()
+}
+
+// SetUserPassword stores a bcrypt hash for the given user.
+func (c *Client) SetUserPassword(ctx context.Context, userID, bcryptHash string) error {
+	return c.rdb.Set(ctx, "users:"+userID+":password", bcryptHash, 0).Err()
+}
+
+// GetUserPassword retrieves the bcrypt hash for the given user. Returns an
+// empty string without error when the user has no password set (OAuth-only account).
+func (c *Client) GetUserPassword(ctx context.Context, userID string) (string, error) {
+	val, err := c.rdb.Get(ctx, "users:"+userID+":password").Result()
+	if err == goredis.Nil {
+		return "", nil
+	}
+	return val, err
+}
+
 // LinkIdentity atomically records that provider:providerUserID maps to the
 // canonical userID and adds the identity string to the user's identity set.
 func (c *Client) LinkIdentity(ctx context.Context, userID, provider, providerUserID string) error {

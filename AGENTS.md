@@ -37,6 +37,7 @@ A simple public chat-room web app built with Go and HTMX. Real-time via Server-S
 ## Implemented Features (as of latest commit)
 
 - GitHub OAuth login with allow-list or open registration
+- **Password auth** (optional — enabled when `ENABLE_PASSWORD_LOGIN=true`): email + password login; accounts provisioned via `go run ./cmd/createuser`; bcrypt cost 12; respects the same allow-list / open-registration rules as OAuth
 - Single chat room with real-time SSE messaging
 - Message delete (author only; SSE-broadcast to all clients)
 - Emoji reactions (toggle; preset popover + full picker; SSE-broadcast)
@@ -69,6 +70,7 @@ main.go                        # Entry point: wire routes, seed room, serve
 internal/
   auth/
     oauth.go                   # OAuth flow; GitHub only; HandleLogin, HandleCallback, HandleLogout
+    password.go                # Password auth; PasswordHandler.HandleLogin; POST /auth/password/login
     session.go                 # HMAC cookie sign/verify; SignToken, VerifyToken, SetCookie, ClearCookie
   handler/
     rooms.go                   # GET / → redirect /rooms/bemro; GET /rooms/{id}
@@ -101,7 +103,7 @@ web/
     reactions.html             # Reactions bar partial (used standalone for SSE reaction events)
     history.html               # Infinite-scroll history partial (sentinel + messages)
     unfurl.html                # Link preview card partial
-    login.html                 # Login page (GitHub button)
+    login.html                 # Login page (GitHub button; optional password form via PasswordAuthEnabled)
     error.html                 # Error page
   static/
     style.css                  # All styles
@@ -109,6 +111,8 @@ web/
     logo_square_256.png
     sw.js                      # Service Worker (served at /sw.js, root scope, no-cache)
     chime.mp3                  # In-tab notification chime sound
+cmd/
+  createuser/main.go           # CLI: provision a password-auth account (email, name, bcrypt hash)
 compose.yml                    # Docker Compose: app + Redis + RedisInsight + MinIO
 Dockerfile / Dockerfile.prod   # Dev and production builds
 .air.toml                      # Air live-reload config (dev)
@@ -123,6 +127,7 @@ GET  /login                                — login page
 GET  /auth/{provider}                      — start OAuth (GitHub only)
 GET  /auth/{provider}/callback             — OAuth callback
 POST /auth/logout                          — clear session
+POST /auth/password/login                  — email+password login (only when ENABLE_PASSWORD_LOGIN=true)
 
 GET  /                                     — redirect → /rooms/bemro
 GET  /rooms/{id}                           — room page (last 50 msgs)
@@ -167,6 +172,8 @@ messages:{msg-id}                       Hash    id, room_id, user_id, text, atta
 reactions:{msg-id}                      Hash    emoji → count; TTL 30 days
 reactions:{msg-id}:users                Hash    "{emoji}\x00{userID}" → "1"; TTL 30 days
 unfurls:{sha256-of-url}                 String  JSON Unfurl or "null"; TTL 24h (success) / 15 min (failure)
+users:{uuid}:password                   String  bcrypt hash (cost 12); no TTL; only set for password-auth accounts
+email_index:{email}                     String  canonical uuid; no TTL; written by createuser CLI
 ```
 
 ### Identity model
@@ -296,6 +303,8 @@ S3_SECRET_ACCESS_KEY
 VAPID_PUBLIC_KEY       base64url P-256 public key; omit to disable Web Push
 VAPID_PRIVATE_KEY      base64url P-256 private key
 VAPID_SUBJECT          contact URI, e.g. mailto:admin@yourdomain.com
+
+ENABLE_PASSWORD_LOGIN  "true" to enable email+password login; unset/false = completely hidden
 ```
 
 ---

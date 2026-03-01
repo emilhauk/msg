@@ -30,6 +30,36 @@
         Continue with GitHub
       </a>
     </div>
+
+    {{if .Data.PasswordAuthEnabled}}
+    <div class="login-card__divider"><span>or</span></div>
+
+    <form class="login-card__password-form" method="post" action="/auth/password/login" autocomplete="on">
+      <label class="form-field">
+        <span class="form-field__label">Email</span>
+        <input
+          class="form-field__input"
+          type="email"
+          name="email"
+          autocomplete="email"
+          required
+          placeholder="you@example.com"
+        >
+      </label>
+      <label class="form-field">
+        <span class="form-field__label">Password</span>
+        <input
+          class="form-field__input"
+          type="password"
+          name="password"
+          autocomplete="current-password"
+          required
+          placeholder="••••••••"
+        >
+      </label>
+      <button class="btn btn--primary" type="submit">Sign in</button>
+    </form>
+    {{end}}
   </div>
 </div>
 {{end}}
