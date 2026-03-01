@@ -15,24 +15,25 @@
 
   {{/* Notification bell — states: off (no permission/not subscribed), on (subscribed), muted */}}
   <div class="notif-wrap" id="notif-wrap">
-    <button class="btn btn--icon notif-bell" id="notif-bell" aria-label="Enable notifications" data-state="off">
-      {{/* Bell-off SVG (default) */}}
-      <svg class="notif-bell__icon notif-bell__icon--off" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+    <button class="btn btn--icon notif-bell" id="notif-bell" aria-label="Enable notifications" data-state="pending">
+      {{/* Single filled bell SVG — used for both "on" and "muted" states */}}
+      <svg class="notif-bell__icon notif-bell__icon--filled" aria-hidden="true" viewBox="0 0 24 24" fill="currentColor" stroke="none">
+        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+      </svg>
+      {{/* Bell-off SVG (outline with slash) */}}
+      <svg class="notif-bell__icon notif-bell__icon--off" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
         <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
         <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
         <line x1="1" y1="1" x2="23" y2="23"/>
       </svg>
-      {{/* Bell-on SVG */}}
-      <svg class="notif-bell__icon notif-bell__icon--on" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-      </svg>
-      {{/* Bell-muted SVG */}}
-      <svg class="notif-bell__icon notif-bell__icon--muted" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
-        <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
-        <text x="8" y="11" font-size="7" fill="currentColor" stroke="none" font-family="sans-serif">Zzz</text>
-      </svg>
+      {{/* Loading spinner — shown while requesting permission / subscribing */}}
+      <span class="notif-spinner" aria-hidden="true"></span>
+      {{/* Badge dot — shown only when muted */}}
+      <span class="notif-badge" aria-hidden="true"></span>
+      {{/* Pill labels — inside the button so the dashed border encloses them */}}
+      <span class="notif-pill notif-pill--off" aria-hidden="true">Notify me</span>
+      <span class="notif-pill notif-pill--muted" aria-hidden="true">Muted</span>
     </button>
     {{/* Mute popover */}}
     <div class="notif-popover" id="notif-popover" hidden>
@@ -147,6 +148,27 @@
     </form>
   </section>
 </div>
+
+<dialog id="ios-pwa-guide" class="pwa-guide">
+  <button class="pwa-guide__close" aria-label="Close">&times;</button>
+  <h2 class="pwa-guide__title">Enable notifications</h2>
+  <p class="pwa-guide__intro">
+    On iPhone and iPad, notifications require the app to be added to your Home Screen.
+  </p>
+  <ol class="pwa-guide__steps">
+    <li>In Safari, tap the <strong>Share</strong>
+      <svg class="pwa-guide__share-icon" aria-label="share icon" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 3v12"/>
+        <path d="M8 7l4-4 4 4"/>
+        <path d="M20 16v4a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-4"/>
+      </svg>
+      button in the toolbar</li>
+    <li>Scroll down and tap <strong>"Add to Home Screen"</strong></li>
+    <li>Tap <strong>Add</strong> in the top-right corner</li>
+    <li>Open the app from your Home Screen and enable notifications there</li>
+  </ol>
+</dialog>
 
 <script>
   // Current authenticated user ID — used by the reaction SSE handler to
@@ -1407,6 +1429,8 @@
         .catch(function (err) {
           console.warn('SW registration failed:', err);
         });
+    } else {
+      setBellState('off');
     }
 
     // ------------------------------------------------------------------
@@ -1416,12 +1440,69 @@
     var popover  = document.getElementById('notif-popover');
     var unmuteBtn = document.getElementById('notif-unmute');
     var unsubBtn  = document.getElementById('notif-unsubscribe');
+    var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    var needsPWAGuide = isIOS && navigator.standalone !== true;
+    var pwaGuide = document.getElementById('ios-pwa-guide');
 
-    function setBellState(state) {
+    if (pwaGuide) {
+      function closeGuide() {
+        pwaGuide.classList.add('is-closing');
+        pwaGuide.addEventListener('animationend', function handler() {
+          pwaGuide.removeEventListener('animationend', handler);
+          pwaGuide.classList.remove('is-closing');
+          pwaGuide.close();
+        });
+      }
+
+      pwaGuide.querySelector('.pwa-guide__close').addEventListener('click', closeGuide);
+      pwaGuide.addEventListener('click', function (e) {
+        if (e.target === pwaGuide) closeGuide();
+      });
+    }
+
+    function setBellState(state, muteUntil) {
       if (!bell) return;
       bell.dataset.state = state;
-      var labels = { off: 'Enable notifications', on: 'Notification settings', muted: 'Notifications muted — click to manage' };
+      bell.disabled = (state === 'loading' || state === 'pending');
+      var labels = {
+        off:     'Enable notifications',
+        on:      'Notification settings',
+        muted:   'Notifications muted — click to manage',
+        loading: 'Enabling notifications…',
+      };
       bell.setAttribute('aria-label', labels[state] || 'Notifications');
+      // Store mute expiry so the hover tooltip can show remaining time.
+      if (state === 'muted' && muteUntil) {
+        bell.dataset.muteUntil = muteUntil; // ISO8601 or "forever"
+      } else {
+        delete bell.dataset.muteUntil;
+        bell.removeAttribute('title');
+      }
+    }
+
+    // Format remaining mute time into a human-readable string.
+    function formatMuteRemaining(muteUntil) {
+      if (!muteUntil || muteUntil === 'forever') return 'Muted indefinitely';
+      var ms = new Date(muteUntil).getTime() - Date.now();
+      if (ms <= 0) return null; // expired
+      var mins  = Math.round(ms / 60000);
+      var hours = Math.round(ms / 3600000);
+      var days  = Math.round(ms / 86400000);
+      if (days >= 2)   return 'Muted for ' + days + ' more days';
+      if (hours >= 2)  return 'Muted for ' + hours + ' more hours';
+      if (mins >= 2)   return 'Muted for ' + mins + ' more minutes';
+      return 'Muted for less than a minute';
+    }
+
+    // Update the native title tooltip on hover when muted.
+    if (bell) {
+      bell.addEventListener('mouseenter', function () {
+        if (bell.dataset.state !== 'muted') return;
+        var text = formatMuteRemaining(bell.dataset.muteUntil);
+        if (text) bell.setAttribute('title', text);
+        else bell.removeAttribute('title');
+      });
     }
 
     function checkMuteState() {
@@ -1429,7 +1510,7 @@
         .then(function (r) { return r.json(); })
         .then(function (data) {
           if (data.muted) {
-            setBellState('muted');
+            setBellState('muted', data.until);
             if (unmuteBtn) unmuteBtn.hidden = false;
           } else {
             setBellState('on');
@@ -1496,12 +1577,22 @@
         var state = bell.dataset.state;
 
         if (state === 'off') {
-          // Request permission, then subscribe.
+          if (needsPWAGuide) {
+            pwaGuide && pwaGuide.showModal();
+            return;
+          }
+          setBellState('loading');
           Notification.requestPermission().then(function (perm) {
-            if (perm !== 'granted') return;
+            if (perm !== 'granted') {
+              setBellState('off');
+              return;
+            }
             subscribeForPush()
               .then(function () { setBellState('on'); })
-              .catch(function (err) { console.warn('Push subscribe failed:', err); });
+              .catch(function (err) {
+                console.warn('Push subscribe failed:', err);
+                setBellState('off');
+              });
           });
           return;
         }
@@ -1515,17 +1606,22 @@
     }
 
     // Mute duration buttons.
+    var MUTE_MS = { '1h': 3600000, '8h': 28800000, '24h': 86400000, '168h': 604800000 };
     if (popover) {
       popover.querySelectorAll('[data-mute]').forEach(function (btn) {
         btn.addEventListener('click', function () {
           var dur = btn.dataset.mute;
+          // Compute until timestamp client-side so the tooltip works immediately
+          // without a round-trip. "forever" stays as the sentinel string.
+          var until = (dur === 'forever') ? 'forever'
+            : new Date(Date.now() + MUTE_MS[dur]).toISOString();
           fetch('/settings/mute', {
             method: 'POST',
             credentials: 'same-origin',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ duration: dur }),
           }).then(function () {
-            setBellState('muted');
+            setBellState('muted', until);
             if (unmuteBtn) unmuteBtn.hidden = false;
             if (popover) popover.hidden = true;
           });

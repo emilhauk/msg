@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"text/template"
 
 	"github.com/emilhauk/chat/internal/auth"
 	"github.com/emilhauk/chat/internal/handler"
@@ -143,6 +144,15 @@ func main() {
 		w.Header().Set("Content-Type", "text/css; charset=utf-8")
 		w.Header().Set("Cache-Control", "public, max-age=86400")
 		_, _ = w.Write([]byte(chromaCSS))
+	})
+
+	// Web App Manifest — no-cache; icon URLs are cache-busted via buildVersion query param.
+	manifestTmpl := `{"name":"msg.","short_name":"msg.","description":"A fast, real-time chat for your team","start_url":"/","scope":"/","display":"standalone","background_color":"#1a1d23","theme_color":"#5865f2","icons":[{"src":"/static/logo_192.png?v={{.V}}","sizes":"192x192","type":"image/png"},{"src":"/static/logo_512.png?v={{.V}}","sizes":"512x512","type":"image/png"}]}`
+	manifestT := template.Must(template.New("manifest").Parse(manifestTmpl))
+	mux.HandleFunc("GET /manifest.json", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/manifest+json")
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		_ = manifestT.Execute(w, map[string]string{"V": buildVersion})
 	})
 
 	// Service Worker — served at root scope with no-cache so the browser always

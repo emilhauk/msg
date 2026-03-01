@@ -309,6 +309,42 @@ ENABLE_PASSWORD_LOGIN  "true" to enable email+password login; unset/false = comp
 
 ---
 
+## Icon Generation
+
+PWA icons (`logo_192.png`, `logo_512.png`) are generated from `favicon.svg` using `rsvg-convert`.
+Do **not** regenerate from `logo_square_256.png` — use the SVG as the source of truth.
+
+Parameters (chosen via visual review — do not change without re-reviewing):
+- **Background:** `#5865f2` rounded square, `rx="22.5"` on a 100×100 canvas (~22.5% iOS-style radius)
+- **Padding:** 15% each side (logo occupies 70×70 units of the 100-unit canvas)
+- **Vertical optical nudge:** +4.5 canvas units downward (the bubble tail makes the logo look high without this)
+
+Regeneration command (run from project root):
+```sh
+python3 - <<'EOF'
+import subprocess
+pad, offset_y = 15, 4.5
+scale = round((100 - 2 * pad) / 22.0, 6)
+svg = f"""<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+  <rect width="100" height="100" rx="22.5" fill="#5865f2"/>
+  <g transform="translate({pad},{pad + offset_y}) scale({scale})">
+    <rect x="0" y="0" width="22" height="16" rx="4" fill="white"/>
+    <circle cx="5.5"  cy="8" r="1.75" fill="#5865f2"/>
+    <circle cx="11"   cy="8" r="1.75" fill="#5865f2"/>
+    <circle cx="16.5" cy="8" r="1.75" fill="#5865f2"/>
+    <path d="M4 15.5 L2 20 L9 15.5" fill="white" stroke-linejoin="round"/>
+  </g>
+</svg>"""
+open('/tmp/logo_icon.svg', 'w').write(svg)
+for px, name in [(180, 'apple-touch-icon.png'), (192, 'logo_192.png'), (512, 'logo_512.png')]:
+    subprocess.run(['rsvg-convert', '-w', str(px), '-h', str(px), '/tmp/logo_icon.svg',
+                    '-o', f'web/static/{name}'], check=True)
+    print(f'Generated web/static/{name}')
+EOF
+```
+
+---
+
 ## Decisions & Constraints
 
 - **GitHub OAuth only.** `GOOGLE_CLIENT_ID` / `DISCORD_CLIENT_ID` are documented in the original spec but the handler rejects non-GitHub providers. Don't add them without a deliberate decision.
