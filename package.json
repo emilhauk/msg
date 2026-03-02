@@ -1,0 +1,11 @@
+{
+  "private": true,
+  "scripts": {
+    "lint": "biome lint web/static/",
+    "format": "biome format --write web/static/",
+    "check": "biome check --write web/static/"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "^2.4.5"
+  }
+}

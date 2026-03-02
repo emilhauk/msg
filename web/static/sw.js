@@ -2,29 +2,27 @@
 // Handles Web Push notifications.
 // Served at /sw.js (root scope) with no-cache headers.
 
-'use strict';
-
 // ---- Push event -------------------------------------------------------
 // Called when the server sends a Web Push notification.
 // If any tab has the app open and focused, we suppress the OS notification
 // (the in-tab chime/toast already handles it).
-self.addEventListener('push', function (event) {
+self.addEventListener('push', (event) => {
   if (!event.data) return;
 
-  var payload;
+  let payload;
   try {
     payload = event.data.json();
-  } catch (e) {
+  } catch (_e) {
     payload = { title: 'New message', body: event.data.text() };
   }
 
-  var title = payload.title || 'New message';
-  var options = {
-    body:  payload.body  || '',
-    icon:  payload.icon  || '/static/logo_square_256.png',
+  const title = payload.title || 'New message';
+  const options = {
+    body: payload.body || '',
+    icon: payload.icon || '/static/logo_square_256.png',
     badge: '/static/logo_square_256.png',
-    tag:   payload.tag   || 'msg-notification',
-    data:  { url: payload.url || '/' },
+    tag: payload.tag || 'msg-notification',
+    data: { url: payload.url || '/' },
     // Reuse the same tag so rapid messages don't stack.
     renotify: true,
   };
@@ -32,10 +30,8 @@ self.addEventListener('push', function (event) {
   event.waitUntil(
     // Check if any tab is currently visible (document.visibilityState === 'visible').
     // clients.matchAll returns all controlled clients (tabs/windows).
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clients) {
-      var hasVisibleTab = clients.some(function (c) {
-        return c.visibilityState === 'visible';
-      });
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
+      const hasVisibleTab = clients.some((c) => c.visibilityState === 'visible');
 
       if (hasVisibleTab) {
         // A tab is already showing the app — the in-tab notification handles it.
@@ -43,23 +39,23 @@ self.addEventListener('push', function (event) {
       }
 
       return self.registration.showNotification(title, options);
-    })
+    }),
   );
 });
 
 // ---- Notification click -----------------------------------------------
 // Focuses an existing tab or opens the room URL when the user taps
 // a notification.
-self.addEventListener('notificationclick', function (event) {
+self.addEventListener('notificationclick', (event) => {
   event.notification.close();
 
-  var targetURL = (event.notification.data && event.notification.data.url) || '/';
+  const targetURL = event.notification.data?.url || '/';
 
   event.waitUntil(
-    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clients) {
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       // If there is already a tab on the same origin, focus it and navigate.
-      for (var i = 0; i < clients.length; i++) {
-        var client = clients[i];
+      for (let i = 0; i < clients.length; i++) {
+        const client = clients[i];
         if ('focus' in client) {
           client.focus();
           if ('navigate' in client) {
@@ -72,17 +68,27 @@ self.addEventListener('notificationclick', function (event) {
       if (self.clients.openWindow) {
         return self.clients.openWindow(targetURL);
       }
-    })
+    }),
   );
 });
 
 // ---- Install / Activate -----------------------------------------------
 // Minimal lifecycle: skip waiting so the new SW takes over immediately
 // after install (important so push subscriptions stay valid across deploys).
-self.addEventListener('install', function () {
+self.addEventListener('install', () => {
   self.skipWaiting();
 });
 
-self.addEventListener('activate', function (event) {
-  event.waitUntil(self.clients.claim());
+self.addEventListener('activate', (event) => {
+  // claim() rejects if a newer SW has already taken over by the time this
+  // activate event runs (race during rapid installs). That's fine — the newer
+  // SW will claim the clients instead, so we can safely swallow the error.
+  // The spec mandates InvalidStateError; Chrome throws TypeError instead.
+  // Any other error is unexpected and should propagate.
+  event.waitUntil(
+    self.clients.claim().catch((err) => {
+      if (err instanceof TypeError || err.name === 'InvalidStateError') return;
+      throw err;
+    }),
+  );
 });
