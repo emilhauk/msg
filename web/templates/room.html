@@ -49,10 +49,21 @@
     </div>
   </div>
 
-  <span class="site-header__username">{{.Data.User.Name}}</span>
-  <form method="post" action="/auth/logout" style="display:inline">
-    <button class="btn btn--ghost btn--sm" type="submit">Sign out</button>
-  </form>
+  <div class="profile-wrap" id="profile-wrap">
+    <button class="btn btn--icon" id="profile-btn" aria-label="Profile">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="8" r="4"/>
+        <path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/>
+      </svg>
+    </button>
+    <div class="profile-popover" id="profile-popover" hidden>
+      <p class="profile-popover__name">{{.Data.User.Name}}</p>
+      <hr class="notif-popover__sep">
+      <form method="post" action="/auth/logout">
+        <button class="notif-popover__item notif-popover__item--danger" type="submit">Sign out</button>
+      </form>
+    </div>
+  </div>
 </div>
 {{end}}
 
@@ -1656,6 +1667,25 @@
       if (popover && !popover.hidden) {
         var wrap = document.getElementById('notif-wrap');
         if (wrap && !wrap.contains(e.target)) popover.hidden = true;
+      }
+    });
+  }());
+
+  // ---- Profile popover ----
+  (function () {
+    var profileBtn     = document.getElementById('profile-btn');
+    var profilePopover = document.getElementById('profile-popover');
+    if (!profileBtn || !profilePopover) return;
+
+    profileBtn.addEventListener('click', function (e) {
+      e.stopPropagation();
+      profilePopover.hidden = !profilePopover.hidden;
+    });
+
+    document.addEventListener('click', function (e) {
+      if (!profilePopover.hidden) {
+        var wrap = document.getElementById('profile-wrap');
+        if (wrap && !wrap.contains(e.target)) profilePopover.hidden = true;
       }
     });
   }());

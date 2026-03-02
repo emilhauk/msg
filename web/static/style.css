@@ -255,9 +255,32 @@ img { display: block; max-width: 100%; }
 }
 .update-hint[hidden] { display: none; }
 
-.site-header__username {
+.profile-wrap {
+  position: relative;
+}
+
+.profile-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 200;
+  min-width: 160px;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-md);
+  padding: .375rem 0;
+}
+.profile-popover[hidden] { display: none; }
+
+.profile-popover__name {
   font-size: .875rem;
   color: var(--color-text-muted);
+  padding: .375rem .875rem;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ============================================================
