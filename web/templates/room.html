@@ -1422,8 +1422,20 @@
     // Service Worker registration
     // ------------------------------------------------------------------
     var swRegistration = null;
+    var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+    var needsPWAGuide = isIOS && navigator.standalone !== true;
 
-    if ('serviceWorker' in navigator) {
+    var bell     = document.getElementById('notif-bell');
+    var popover  = document.getElementById('notif-popover');
+    var unmuteBtn = document.getElementById('notif-unmute');
+    var unsubBtn  = document.getElementById('notif-unsubscribe');
+    var pwaGuide = document.getElementById('ios-pwa-guide');
+
+    if (needsPWAGuide) {
+      // iOS Safari (browser mode): push not supported, don't wait for SW/push checks.
+      setBellState('off');
+    } else if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/sw.js', { scope: '/' })
         .then(function (reg) {
           swRegistration = reg;
@@ -1447,15 +1459,6 @@
     // ------------------------------------------------------------------
     // Bell UI state
     // ------------------------------------------------------------------
-    var bell     = document.getElementById('notif-bell');
-    var popover  = document.getElementById('notif-popover');
-    var unmuteBtn = document.getElementById('notif-unmute');
-    var unsubBtn  = document.getElementById('notif-unsubscribe');
-    var isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) ||
-      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-    var needsPWAGuide = isIOS && navigator.standalone !== true;
-    var pwaGuide = document.getElementById('ios-pwa-guide');
-
     if (pwaGuide) {
       function closeGuide() {
         pwaGuide.classList.add('is-closing');
