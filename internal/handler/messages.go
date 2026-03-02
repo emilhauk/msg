@@ -221,20 +221,66 @@ func (h *MessagesHandler) sendPushNotifications(msg model.Message, mentionedName
 	}
 }
 
-// HandleHistory handles GET /rooms/{id}/messages?before=<ms>&limit=50.
+// HandleHistory handles GET /rooms/{id}/messages with either:
+//   - ?before=<ms>&limit=N  — paginate backwards (infinite scroll)
+//   - ?after=<ms>&limit=N   — catch-up messages missed during an idle reconnect
 func (h *MessagesHandler) HandleHistory(w http.ResponseWriter, r *http.Request) {
 	roomID := r.PathValue("id")
-	beforeStr := r.URL.Query().Get("before")
-	limitStr := r.URL.Query().Get("limit")
+	q := r.URL.Query()
+	afterStr := q.Get("after")
+	beforeStr := q.Get("before")
+	limitStr := q.Get("limit")
 
+	limit := 50
+	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
+		limit = l
+	}
+
+	user := middleware.UserFromContext(r.Context())
+
+	type historyData struct {
+		Messages      []*model.MessageView
+		RoomID        string
+		OldestMS      string
+		HasMore       bool
+		CurrentUserID string
+	}
+
+	// ?after=<ms>: fetch messages newer than the given timestamp (catch-up).
+	if afterStr != "" && beforeStr == "" {
+		after, err := strconv.ParseInt(afterStr, 10, 64)
+		if err != nil {
+			http.Error(w, "invalid after parameter", http.StatusBadRequest)
+			return
+		}
+		msgs, err := h.Redis.GetMessagesAfter(r.Context(), roomID, after, limit)
+		if err != nil {
+			http.Error(w, "failed to load messages", http.StatusInternalServerError)
+			return
+		}
+		if err := hydrateMessages(r.Context(), h.Redis, msgs, user.ID); err != nil {
+			http.Error(w, "failed to load message data", http.StatusInternalServerError)
+			return
+		}
+		views := make([]*model.MessageView, len(msgs))
+		for i, m := range msgs {
+			views[i] = &model.MessageView{Message: m, CurrentUserID: user.ID}
+		}
+		h.Renderer.Render(w, http.StatusOK, "history.html", historyData{
+			Messages:      views,
+			RoomID:        roomID,
+			OldestMS:      "",
+			HasMore:       false,
+			CurrentUserID: user.ID,
+		})
+		return
+	}
+
+	// ?before=<ms>: paginate backwards (existing infinite-scroll behaviour).
 	before, err := strconv.ParseInt(beforeStr, 10, 64)
 	if err != nil {
 		http.Error(w, "invalid before parameter", http.StatusBadRequest)
 		return
-	}
-	limit := 50
-	if l, err := strconv.Atoi(limitStr); err == nil && l > 0 && l <= 100 {
-		limit = l
 	}
 
 	msgs, err := h.Redis.GetMessagesBefore(r.Context(), roomID, before, limit)
@@ -243,7 +289,6 @@ func (h *MessagesHandler) HandleHistory(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	user := middleware.UserFromContext(r.Context())
 	if err := hydrateMessages(r.Context(), h.Redis, msgs, user.ID); err != nil {
 		http.Error(w, "failed to load message data", http.StatusInternalServerError)
 		return
@@ -259,13 +304,6 @@ func (h *MessagesHandler) HandleHistory(w http.ResponseWriter, r *http.Request) 
 		views[i] = &model.MessageView{Message: m, CurrentUserID: user.ID}
 	}
 
-	type historyData struct {
-		Messages      []*model.MessageView
-		RoomID        string
-		OldestMS      string
-		HasMore       bool
-		CurrentUserID string
-	}
 	h.Renderer.Render(w, http.StatusOK, "history.html", historyData{
 		Messages:      views,
 		RoomID:        roomID,

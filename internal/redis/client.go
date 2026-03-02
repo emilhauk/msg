@@ -284,6 +284,20 @@ func (c *Client) GetLatestMessages(ctx context.Context, roomID string, limit int
 	return c.fetchMessages(ctx, ids, true)
 }
 
+// GetMessagesAfter returns up to limit messages scored above afterMS, oldest-first.
+func (c *Client) GetMessagesAfter(ctx context.Context, roomID string, afterMS int64, limit int) ([]*model.Message, error) {
+	min := "(" + strconv.FormatInt(afterMS, 10)
+	ids, err := c.rdb.ZRangeByScore(ctx, "rooms:"+roomID+":messages", &goredis.ZRangeBy{
+		Min:   min,
+		Max:   "+inf",
+		Count: int64(limit),
+	}).Result()
+	if err != nil {
+		return nil, err
+	}
+	return c.fetchMessages(ctx, ids, false) // already ascending; no reversal needed
+}
+
 // GetMessagesBefore returns up to limit messages scored below beforeMS.
 func (c *Client) GetMessagesBefore(ctx context.Context, roomID string, beforeMS int64, limit int) ([]*model.Message, error) {
 	max := "(" + strconv.FormatInt(beforeMS, 10)

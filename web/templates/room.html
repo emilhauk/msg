@@ -865,7 +865,12 @@
         __serverVersion = e.data;
         return;
       }
-      if (e.data === __serverVersion) return;
+      if (e.data === __serverVersion) {
+        // Same version = idle reconnect (iOS PWA background suspend, etc.).
+        // Fetch any messages that arrived while the SSE connection was down.
+        catchUpMissedMessages();
+        return;
+      }
 
       if (!document.hasFocus()) {
         window.location.reload();
@@ -875,6 +880,39 @@
       var hint = document.getElementById('update-hint');
       if (hint) hint.hidden = false;
     });
+
+    function catchUpMissedMessages() {
+      var articles = document.querySelectorAll('#message-list-content article.message');
+      if (!articles.length) return;
+      var lastId = articles[articles.length - 1].id.replace('msg-', '');
+      var ms = parseInt(lastId.split('-')[0], 10);
+      if (!ms) return;
+
+      var target = document.getElementById('sse-message-target');
+      if (!target) return;
+
+      fetch('/rooms/{{.Data.Room.ID}}/messages?after=' + ms + '&limit=50')
+        .then(function (r) { return r.ok ? r.text() : null; })
+        .then(function (html) {
+          if (!html || !html.trim()) return;
+          var tmp = document.createElement('div');
+          tmp.innerHTML = html;
+          var inserted = false;
+          tmp.querySelectorAll('article.message').forEach(function (article) {
+            if (!document.getElementById(article.id)) {
+              target.insertAdjacentElement('beforebegin', article);
+              htmx.process(article);
+              applyOwnerControls(article);
+              inserted = true;
+            }
+          });
+          if (inserted) {
+            var list = document.getElementById('message-list');
+            if (list) list.scrollTop = list.scrollHeight;
+          }
+        })
+        .catch(function () {}); // silent fail — SSE will deliver new messages anyway
+    }
 
     // Reload after a successful message send if a deploy was detected.
     var form = document.querySelector('.message-form');
