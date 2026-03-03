@@ -14,7 +14,7 @@ import (
 	"github.com/alecthomas/chroma/v2/lexers"
 	"github.com/alecthomas/chroma/v2/styles"
 
-	"github.com/emilhauk/chat/internal/model"
+	"github.com/emilhauk/msg/internal/model"
 )
 
 // urlPattern matches http and https URLs in message text.

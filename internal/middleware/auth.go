@@ -4,9 +4,9 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/emilhauk/chat/internal/auth"
-	"github.com/emilhauk/chat/internal/model"
-	redisclient "github.com/emilhauk/chat/internal/redis"
+	"github.com/emilhauk/msg/internal/auth"
+	"github.com/emilhauk/msg/internal/model"
+	redisclient "github.com/emilhauk/msg/internal/redis"
 )
 
 type contextKey string

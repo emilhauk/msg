@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/emilhauk/chat/internal/middleware"
-	"github.com/emilhauk/chat/internal/storage"
+	"github.com/emilhauk/msg/internal/middleware"
+	"github.com/emilhauk/msg/internal/storage"
 )
 
 const maxUploadBytes = 50 << 20 // 50 MiB

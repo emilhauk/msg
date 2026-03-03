@@ -3,10 +3,10 @@ package handler
 import (
 	"net/http"
 
-	"github.com/emilhauk/chat/internal/middleware"
-	"github.com/emilhauk/chat/internal/model"
-	redisclient "github.com/emilhauk/chat/internal/redis"
-	"github.com/emilhauk/chat/internal/tmpl"
+	"github.com/emilhauk/msg/internal/middleware"
+	"github.com/emilhauk/msg/internal/model"
+	redisclient "github.com/emilhauk/msg/internal/redis"
+	"github.com/emilhauk/msg/internal/tmpl"
 )
 
 // RoomsHandler handles room page requests.

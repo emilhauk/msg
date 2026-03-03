@@ -14,8 +14,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/emilhauk/chat/internal/model"
-	redisclient "github.com/emilhauk/chat/internal/redis"
+	"github.com/emilhauk/msg/internal/model"
+	redisclient "github.com/emilhauk/msg/internal/redis"
 	"github.com/google/uuid"
 )
 

@@ -1,4 +1,4 @@
-module github.com/emilhauk/chat
+module github.com/emilhauk/msg
 
 go 1.25.7
 

@@ -8,7 +8,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/emilhauk/chat/internal/model"
+	"github.com/emilhauk/msg/internal/model"
 )
 
 // isValidHTTPURL returns true if s is a well-formed http/https URL with a host

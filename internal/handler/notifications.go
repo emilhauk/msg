@@ -5,9 +5,9 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/emilhauk/chat/internal/middleware"
-	redisclient "github.com/emilhauk/chat/internal/redis"
-	"github.com/emilhauk/chat/internal/webpush"
+	"github.com/emilhauk/msg/internal/middleware"
+	redisclient "github.com/emilhauk/msg/internal/redis"
+	"github.com/emilhauk/msg/internal/webpush"
 )
 
 // NotificationsHandler handles Web Push subscription management and mute settings.

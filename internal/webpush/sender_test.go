@@ -11,7 +11,7 @@ import (
 	"testing"
 
 	webpushlib "github.com/SherClockHolmes/webpush-go"
-	"github.com/emilhauk/chat/internal/webpush"
+	"github.com/emilhauk/msg/internal/webpush"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

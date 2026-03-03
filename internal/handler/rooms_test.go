@@ -4,8 +4,8 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/emilhauk/chat/internal/model"
-	"github.com/emilhauk/chat/internal/testutil"
+	"github.com/emilhauk/msg/internal/model"
+	"github.com/emilhauk/msg/internal/testutil"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

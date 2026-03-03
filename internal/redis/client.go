@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/emilhauk/chat/internal/model"
+	"github.com/emilhauk/msg/internal/model"
 	goredis "github.com/redis/go-redis/v9"
 )
 

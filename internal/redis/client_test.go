@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/alicebob/miniredis/v2"
-	"github.com/emilhauk/chat/internal/model"
-	redisclient "github.com/emilhauk/chat/internal/redis"
+	"github.com/emilhauk/msg/internal/model"
+	redisclient "github.com/emilhauk/msg/internal/redis"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

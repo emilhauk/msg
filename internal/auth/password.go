@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	redisclient "github.com/emilhauk/chat/internal/redis"
+	redisclient "github.com/emilhauk/msg/internal/redis"
 	"golang.org/x/crypto/bcrypt"
 )
 

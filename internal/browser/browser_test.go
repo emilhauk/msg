@@ -18,8 +18,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/emilhauk/chat/internal/model"
-	"github.com/emilhauk/chat/internal/testutil"
+	"github.com/emilhauk/msg/internal/model"
+	"github.com/emilhauk/msg/internal/testutil"
 	"github.com/go-rod/rod"
 	"github.com/go-rod/rod/lib/launcher"
 	"github.com/go-rod/rod/lib/proto"

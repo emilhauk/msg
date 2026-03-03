@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/emilhauk/chat/internal/middleware"
-	"github.com/emilhauk/chat/internal/model"
-	redisclient "github.com/emilhauk/chat/internal/redis"
-	"github.com/emilhauk/chat/internal/storage"
-	"github.com/emilhauk/chat/internal/tmpl"
-	"github.com/emilhauk/chat/internal/webpush"
+	"github.com/emilhauk/msg/internal/middleware"
+	"github.com/emilhauk/msg/internal/model"
+	redisclient "github.com/emilhauk/msg/internal/redis"
+	"github.com/emilhauk/msg/internal/storage"
+	"github.com/emilhauk/msg/internal/tmpl"
+	"github.com/emilhauk/msg/internal/webpush"
 )
 
 var urlRe = regexp.MustCompile(`https?://[^\s]+`)
