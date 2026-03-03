@@ -137,11 +137,11 @@ func TestOwnerControls_InitialLoad(t *testing.T) {
 		t.Error("alice's own message: expected edit button to be visible, but it is hidden")
 	}
 
-	// bob's message: edit button must remain hidden for alice
-	bobEdit := page.Timeout(5 * time.Second).
-		MustElement("#msg-" + bobMsg.ID + " .message__edit")
-	if !isHidden(t, bobEdit) {
-		t.Error("bob's message: expected edit button to be hidden for alice, but it is visible")
+	// bob's message: edit button must not exist at all for alice (server omits it for non-owners)
+	has, _, err := page.Has("#msg-" + bobMsg.ID + " .message__edit")
+	require.NoError(t, err)
+	if has {
+		t.Error("bob's message: expected no edit button for alice, but one was found")
 	}
 }
 
@@ -197,6 +197,171 @@ func TestOwnerControls_SSEInsert_OtherUser(t *testing.T) {
 	editBtn := article.MustElement(".message__edit")
 	if !isHidden(t, editBtn) {
 		t.Error("SSE-inserted other user's message: expected edit button to be hidden, but it is visible")
+	}
+}
+
+// enterMsgNavMode focuses the compose textarea, clears it, and dispatches an
+// ArrowUp keydown to enter keyboard message-navigation mode. It waits for a
+// .message--active element to confirm the mode is active.
+func enterMsgNavMode(t *testing.T, page *rod.Page) {
+	t.Helper()
+	page.MustEval(`() => {
+		const ta = document.querySelector('.message-form__textarea');
+		ta.focus();
+		ta.value = '';
+		ta.dispatchEvent(new KeyboardEvent('keydown', {key: 'ArrowUp', bubbles: true, cancelable: true}));
+	}`)
+	page.Timeout(2 * time.Second).MustElement(".message--active")
+}
+
+// pressNavKey dispatches a keydown event on the document while in navigation mode.
+func pressNavKey(page *rod.Page, key string) {
+	page.MustEval(fmt.Sprintf(`() =>
+		document.dispatchEvent(new KeyboardEvent('keydown', {key: %q, bubbles: true, cancelable: true}))
+	`, key))
+}
+
+// TestKeyboard_E_Ignored_OtherUserMessage verifies that pressing 'e' during
+// message navigation does nothing when the active message is from another user.
+// The SSE-broadcast path is used because that is where hidden buttons exist in
+// the DOM and the guard matters most.
+func TestKeyboard_E_Ignored_OtherUserMessage(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping browser test in short mode")
+	}
+	const kbRoom = "room-kb-e-ignored"
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: kbRoom, Name: "Keyboard Test"})
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), alice))
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), bob))
+
+	b := newBrowser(t)
+	page := authPage(t, b, ts, alice, kbRoom)
+
+	// Wait for SSE connection to be established before posting.
+	time.Sleep(300 * time.Millisecond)
+
+	// Bob posts a message; Alice receives it via SSE (buttons present but hidden).
+	postMessage(t, ts, bob, kbRoom, "bob's message")
+	page.Timeout(5 * time.Second).MustElement("article.message")
+
+	// Intercept __openEdit to detect if it is called.
+	page.MustEval(`() => {
+		window.__openEditCalled = false;
+		const orig = window.__openEdit;
+		window.__openEdit = (id) => { window.__openEditCalled = true; if (orig) orig(id); };
+	}`)
+
+	enterMsgNavMode(t, page)
+	pressNavKey(page, "e")
+	time.Sleep(100 * time.Millisecond)
+
+	called := page.MustEval(`() => window.__openEditCalled`).Value.Bool()
+	if called {
+		t.Error("'e' key on another user's message should be ignored, but __openEdit was called")
+	}
+}
+
+// TestKeyboard_D_Ignored_OtherUserMessage verifies that pressing 'd' during
+// message navigation does not prompt for deletion on another user's message.
+func TestKeyboard_D_Ignored_OtherUserMessage(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping browser test in short mode")
+	}
+	const kbRoom = "room-kb-d-ignored"
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: kbRoom, Name: "Keyboard Test"})
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), alice))
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), bob))
+
+	b := newBrowser(t)
+	page := authPage(t, b, ts, alice, kbRoom)
+
+	time.Sleep(300 * time.Millisecond)
+
+	postMessage(t, ts, bob, kbRoom, "bob's message")
+	page.Timeout(5 * time.Second).MustElement("article.message")
+
+	// Replace window.confirm so we can detect any call without blocking.
+	page.MustEval(`() => {
+		window.__confirmCalled = false;
+		window.confirm = () => { window.__confirmCalled = true; return false; };
+	}`)
+
+	enterMsgNavMode(t, page)
+	pressNavKey(page, "d")
+	time.Sleep(100 * time.Millisecond)
+
+	called := page.MustEval(`() => window.__confirmCalled`).Value.Bool()
+	if called {
+		t.Error("'d' key on another user's message should be ignored, but window.confirm was called")
+	}
+}
+
+// TestKeyboard_E_Works_OwnMessage verifies that pressing 'e' opens the edit
+// form when the active message belongs to the current user.
+func TestKeyboard_E_Works_OwnMessage(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping browser test in short mode")
+	}
+	const kbRoom = "room-kb-e-own"
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: kbRoom, Name: "Keyboard Test"})
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), alice))
+
+	// Seed alice's own message on initial load (server renders buttons visible).
+	seedMessage(t, ts, alice, kbRoom, "alice's own message")
+
+	b := newBrowser(t)
+	page := authPage(t, b, ts, alice, kbRoom)
+	page.Timeout(5 * time.Second).MustElement("article.message")
+
+	page.MustEval(`() => {
+		window.__openEditCalled = false;
+		const orig = window.__openEdit;
+		window.__openEdit = (id) => { window.__openEditCalled = true; if (orig) orig(id); };
+	}`)
+
+	enterMsgNavMode(t, page)
+	pressNavKey(page, "e")
+	time.Sleep(100 * time.Millisecond)
+
+	called := page.MustEval(`() => window.__openEditCalled`).Value.Bool()
+	if !called {
+		t.Error("'e' key on own message should open the edit form, but __openEdit was not called")
+	}
+}
+
+// TestKeyboard_D_Works_OwnMessage verifies that pressing 'd' prompts for
+// deletion when the active message belongs to the current user.
+func TestKeyboard_D_Works_OwnMessage(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping browser test in short mode")
+	}
+	const kbRoom = "room-kb-d-own"
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: kbRoom, Name: "Keyboard Test"})
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), alice))
+
+	seedMessage(t, ts, alice, kbRoom, "alice's own message")
+
+	b := newBrowser(t)
+	page := authPage(t, b, ts, alice, kbRoom)
+	page.Timeout(5 * time.Second).MustElement("article.message")
+
+	// Replace window.confirm to capture the call without blocking or deleting.
+	page.MustEval(`() => {
+		window.__confirmCalled = false;
+		window.confirm = () => { window.__confirmCalled = true; return false; };
+	}`)
+
+	enterMsgNavMode(t, page)
+	pressNavKey(page, "d")
+	time.Sleep(100 * time.Millisecond)
+
+	called := page.MustEval(`() => window.__confirmCalled`).Value.Bool()
+	if !called {
+		t.Error("'d' key on own message should prompt for confirmation, but window.confirm was not called")
 	}
 }
 

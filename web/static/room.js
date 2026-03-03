@@ -1049,7 +1049,7 @@ function applyMyReactions(barEl, msgId) {
     if (e.key === 'e') {
       // Open edit on the active message if the current user owns it.
       const editTrigger = activeMsg.querySelector('[data-edit-trigger]');
-      if (editTrigger && window.__openEdit) {
+      if (editTrigger && !editTrigger.hidden && window.__openEdit) {
         e.preventDefault();
         const msgId = editTrigger.dataset.editTrigger;
         setActive(null); // remove highlight before entering edit mode
@@ -1061,7 +1061,7 @@ function applyMyReactions(barEl, msgId) {
     if (e.key === 'd') {
       // Delete the active message if the current user owns it.
       const deleteBtn = activeMsg.querySelector('.message__delete');
-      if (deleteBtn) {
+      if (deleteBtn && !deleteBtn.hidden) {
         e.preventDefault();
         if (window.confirm('Delete this message?')) {
           exitNav(); // clear active state before the element is removed
