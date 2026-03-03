@@ -597,8 +597,8 @@ img { display: block; max-width: 100%; }
   align-self: center;
 }
 
-.message:hover .message__edit,
-.message__edit:focus-visible {
+.message:hover .message__edit:not([hidden]),
+.message__edit:focus-visible:not([hidden]) {
   opacity: 1;
 }
 
@@ -615,8 +615,8 @@ img { display: block; max-width: 100%; }
   align-self: center;
 }
 
-.message:hover .message__delete,
-.message__delete:focus-visible {
+.message:hover .message__delete:not([hidden]),
+.message__delete:focus-visible:not([hidden]) {
   opacity: 1;
 }
 
@@ -642,15 +642,15 @@ img { display: block; max-width: 100%; }
 }
 
 /* Keep action buttons visible on the active message */
-.message--active .message__edit,
-.message--active .message__delete {
+.message--active .message__edit:not([hidden]),
+.message--active .message__delete:not([hidden]) {
   opacity: 1;
 }
 
 /* Touch devices: always show edit/delete controls (no hover available) */
 @media (hover: none) {
-  .message__edit,
-  .message__delete {
+  .message__edit:not([hidden]),
+  .message__delete:not([hidden]) {
     opacity: 1;
   }
 }

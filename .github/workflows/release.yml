@@ -10,6 +10,15 @@ env:
   IMAGE_NAME: ghcr.io/emilhauk/msg
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - run: go test ./... -race -timeout 60s -count=1 -short
+
   lint:
     runs-on: ubuntu-latest
     steps:
@@ -28,9 +37,19 @@ jobs:
       - name: Biome check
         run: npm run lint
 
+  e2e:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - name: Run E2E tests
+        run: go test ./internal/browser/... -v -timeout 120s
+
   build-and-push:
     runs-on: ubuntu-latest
-    needs: lint
+    needs: [lint, test, e2e]
     permissions:
       contents: read
       packages: write

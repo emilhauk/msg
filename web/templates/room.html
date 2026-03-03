@@ -193,7 +193,7 @@
   // Current authenticated user ID — used by the reaction SSE handler to
   // determine which reaction pills should be marked as active, and by
   // applyOwnerControls to show edit/delete buttons on the viewer's own messages.
-  var __currentUserID = {{.Data.User.ID | printf "%q"}};
+  var __currentUserID = "{{.Data.User.ID}}";
 
   // applyOwnerControls unhides the edit and delete buttons on a message article
   // when the current user is the author. Called at page load and after every
@@ -212,6 +212,11 @@
 
   // Apply on messages loaded via infinite-scroll history swap.
   document.body.addEventListener('htmx:afterSwap', function (e) {
+    // SSE message insertion: after the swap the new article is the previous sibling of the target.
+    if (e.detail.elt && e.detail.elt.id === 'sse-message-target') {
+      var t = document.getElementById('sse-message-target');
+      if (t && t.previousElementSibling) applyOwnerControls(t.previousElementSibling);
+    }
     // The sentinel swaps history HTML beforebegin itself; the inserted nodes
     // are siblings. We re-scan the whole list to catch all newly added articles.
     if (e.detail.elt && e.detail.elt.classList && e.detail.elt.classList.contains('scroll-sentinel')) {
@@ -270,14 +275,8 @@
 
     // Fast path for text-only SSE messages: they insert a new DOM node but
     // produce no resize event on the content wrapper until the node is painted.
-    // Also apply owner controls on the newly inserted message article.
     document.body.addEventListener('htmx:sseMessage', function () {
       snapUnlessScrolledUp();
-      // The newly inserted article is the one immediately before #sse-message-target.
-      var target = document.getElementById('sse-message-target');
-      if (target && target.previousElementSibling) {
-        applyOwnerControls(target.previousElementSibling);
-      }
     });
   }());
 

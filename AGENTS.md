@@ -389,6 +389,54 @@ go build -ldflags "-X main.buildVersion=$(git rev-parse --short HEAD)" .
 
 ---
 
+## Testing
+
+### Go HTTP integration tests (primary layer)
+
+No external services required — all tests use **miniredis** (in-process Redis).
+
+```sh
+# Run all tests (Go + Playwright when e2e/ exists)
+make test
+
+# Go tests only
+make test-go
+
+# Playwright only (skips silently when e2e/ not set up)
+make test-e2e
+
+# Run a single Go package directly
+go test ./internal/handler/... -v
+go test ./internal/redis/... -v
+go test ./internal/auth/... -v
+```
+
+**Test packages and what they cover:**
+
+| Package | File | Scenarios |
+|---|---|---|
+| `internal/handler` | `messages_test.go` | POST→204, empty text→200, unauthenticated→302, pub/sub payload contains `msg:`, DELETE own→204, DELETE other→403, DELETE unknown→404, PATCH own→204, PATCH other→403, PATCH empty→400, history before/after pagination |
+| `internal/handler` | `rooms_test.go` | GET room→200 with HTML, unauthenticated→302, unknown room→404 |
+| `internal/handler` | `sse_test.go` | initial connect→200 + `text/event-stream` + version event, pub/sub relay via Redis publish |
+| `internal/handler` | `reactions_test.go` | toggle add→204 + pub/sub `reaction:` prefix, toggle off (ReactedByMe drops), invalid emoji→400 |
+| `internal/auth` | `password_test.go` | success→302 + cookie, wrong password→redirect with error, unknown email→same error (anti-enum) |
+| `internal/redis` | `client_test.go` | session round-trip, session TTL via `mr.FastForward`, message pagination (before/after/limit), reaction toggle + zero-count cleanup, ReactedByMe per-user |
+
+**Shared test helper** — `internal/testutil/testutil.go`:
+- `NewTestServer(t)` — miniredis + redis client + full mux + `httptest.Server`; all cleaned up via `t.Cleanup`
+- `ts.AuthCookie(t, user)` — seeds a session directly into miniredis, returns signed cookie
+- `ts.SeedRoom(t, room)` — seeds a room record
+- `testutil.NoRedirectClient()` — `*http.Client` that stops at 302 (use for login flow tests)
+- Templates loaded from `../../web` (relative to the test package's CWD, which Go sets to the package directory)
+
+**Key patterns:**
+- `POST /rooms/{id}/messages` (and DELETE, PATCH, reaction toggle) returns **204** with no body; HTML is published to Redis pub/sub and delivered via SSE. Tests assert the 204 status and verify the pub/sub payload separately by subscribing before issuing the request.
+- SSE pub/sub relay test: read initial events first (handler flushes before subscribing), then `time.Sleep(50ms)` to let the subscription register, then publish.
+- Password tests use `bcrypt.MinCost` for speed.
+- Two-user tests (ownership checks) create two users in the same miniredis instance.
+
+---
+
 ## Definition of Done (per feature)
 
 - Renders correctly with HTMX; no full-page reloads where a partial is expected.
@@ -397,3 +445,4 @@ go build -ldflags "-X main.buildVersion=$(git rev-parse --short HEAD)" .
 - Redis keys follow the schema above.
 - New env vars documented in this file.
 - New templates registered in `tmpl.New()` in `internal/tmpl/render.go`.
+- `make test` passes with no failures.

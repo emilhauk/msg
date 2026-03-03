@@ -62,6 +62,10 @@ func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 			}
 			payload := redisMsg.Payload
 			switch {
+			case strings.HasPrefix(payload, "version:"):
+				ver := strings.TrimPrefix(payload, "version:")
+				fmt.Fprintf(w, "event: version\ndata: %s\n\n", ver)
+				flusher.Flush()
 			case strings.HasPrefix(payload, "msg:"):
 				html := strings.TrimPrefix(payload, "msg:")
 				fmt.Fprintf(w, "event: message\ndata: %s\n\n", escapeSSE(html))
