@@ -222,6 +222,7 @@ func (h *MessagesHandler) sendPushNotifications(msg model.Message, mentionedName
 }
 
 // HandleHistory handles GET /rooms/{id}/messages with either:
+//   - no params          — newest limit messages (reconnect catch-up)
 //   - ?before=<ms>&limit=N  — paginate backwards (infinite scroll)
 //   - ?after=<ms>&limit=N   — catch-up messages missed during an idle reconnect
 func (h *MessagesHandler) HandleHistory(w http.ResponseWriter, r *http.Request) {
@@ -244,6 +245,35 @@ func (h *MessagesHandler) HandleHistory(w http.ResponseWriter, r *http.Request) 
 		OldestMS      string
 		HasMore       bool
 		CurrentUserID string
+	}
+
+	// No params: return the newest limit messages for reconnect catch-up.
+	if afterStr == "" && beforeStr == "" {
+		msgs, err := h.Redis.GetLatestMessages(r.Context(), roomID, limit)
+		if err != nil {
+			http.Error(w, "failed to load messages", http.StatusInternalServerError)
+			return
+		}
+		if err := hydrateMessages(r.Context(), h.Redis, msgs, user.ID); err != nil {
+			http.Error(w, "failed to load message data", http.StatusInternalServerError)
+			return
+		}
+		oldestMS := ""
+		if len(msgs) > 0 {
+			oldestMS = msgs[0].CreatedAtMS
+		}
+		views := make([]*model.MessageView, len(msgs))
+		for i, m := range msgs {
+			views[i] = &model.MessageView{Message: m, CurrentUserID: user.ID}
+		}
+		h.Renderer.Render(w, http.StatusOK, "history.html", historyData{
+			Messages:      views,
+			RoomID:        roomID,
+			OldestMS:      oldestMS,
+			HasMore:       len(msgs) == limit,
+			CurrentUserID: user.ID,
+		})
+		return
 	}
 
 	// ?after=<ms>: fetch messages newer than the given timestamp (catch-up).

@@ -251,6 +251,26 @@ func TestHandleHistory_After(t *testing.T) {
 	assert.Contains(t, resp.Header.Get("Content-Type"), "text/html")
 }
 
+func TestHandleHistory_Latest(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: testRoom, Name: "Test Room"})
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), alice))
+	cookie := ts.AuthCookie(t, alice)
+
+	seedMessage(t, ts, alice, "msg1", 2000)
+	seedMessage(t, ts, alice, "msg2", 1000)
+	seedMessage(t, ts, alice, "msg3", 0)
+
+	// No params: should return the newest 50 messages.
+	req, _ := http.NewRequest("GET", ts.Server.URL+"/rooms/"+testRoom+"/messages", nil)
+	req.AddCookie(cookie)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, resp.Header.Get("Content-Type"), "text/html")
+}
+
 // ---------------------------------------------------------------------------
 // Push dispatch helpers
 // ---------------------------------------------------------------------------

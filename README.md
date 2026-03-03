@@ -220,6 +220,13 @@ docker run -p 8080:8080 --env-file .env \
     └── static/              # CSS
 ```
 
+## Known limitations
+
+- **SSE reconnect recovery** — on reconnect, the client fetches the 50 newest messages
+  and merges them into the view. If more than 50 messages were sent during the gap, only
+  the 50 most recent are restored; earlier messages in the gap are not surfaced
+  automatically but remain accessible via scrollback.
+
 ## License
 
 [MIT](LICENSE)

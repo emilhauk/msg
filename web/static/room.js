@@ -725,12 +725,62 @@ function applyMyReactions(barEl, msgId) {
   let __serverVersion = null;
   let __pendingReload = false;
 
+  async function doCatchUp() {
+    let res;
+    try {
+      res = await fetch(`/rooms/${roomID}/messages?limit=50`);
+    } catch (_) {
+      return;
+    }
+    if (!res.ok) return;
+
+    const html = await res.text();
+    const temp = document.createElement('div');
+    temp.innerHTML = html;
+
+    const newArticles = [...temp.querySelectorAll('article.message')];
+    if (newArticles.length === 0) return;
+
+    const content = document.getElementById('message-list-content');
+    const target = document.getElementById('sse-message-target');
+    if (!content || !target) return;
+
+    const hasOverlap = newArticles.some(a => document.getElementById(a.id));
+
+    if (!hasOverlap) {
+      // Big gap: clear stale messages and any existing sentinel.
+      content.querySelectorAll('article.message, .scroll-sentinel').forEach(el => { el.remove(); });
+      // Restore a sentinel from the catch-up response if present.
+      const newSentinel = temp.querySelector('.scroll-sentinel');
+      if (newSentinel) {
+        target.before(newSentinel);
+        htmx.process(newSentinel);
+      }
+    }
+
+    // Insert new (non-duplicate) articles before the SSE target.
+    for (const article of newArticles) {
+      if (!document.getElementById(article.id)) {
+        target.before(article);
+        htmx.process(article);
+        applyOwnerControls(article);
+      }
+    }
+
+    // Snap to bottom so the user sees the freshest messages.
+    const list = document.getElementById('message-list');
+    if (list) list.scrollTop = list.scrollHeight;
+  }
+
   es.addEventListener('version', (e) => {
     if (__serverVersion === null) {
       __serverVersion = e.data;
       return;
     }
-    if (e.data === __serverVersion) return;
+    if (e.data === __serverVersion) {
+      doCatchUp();
+      return;
+    }
 
     if (!document.hasFocus()) {
       window.location.reload();
