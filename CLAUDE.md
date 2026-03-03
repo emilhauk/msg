@@ -1,14 +1,8 @@
-# Chat — Project Guide
+# msg — Project Guide
 
 ## Working Convention
 
-AGENTS.md is the agent's persistent memory. Update it proactively whenever:
-- A technical decision is made or changed
-- A non-obvious pattern or constraint is discovered
-- A feature is added, changed, or removed
-- Anything would otherwise need re-discovery next session
-
-No permission needed — treat it as a working document, not documentation.
+CLAUDE.md contains stable project knowledge: architecture, decisions, conventions, schemas, and routes. Update it when a technical decision is made or changed, a non-obvious constraint is discovered, or a feature is added/changed/removed. No permission needed — treat it as a working document, not documentation.
 
 ---
 
@@ -34,35 +28,6 @@ A simple public chat-room web app built with Go and HTMX. Real-time via Server-S
 
 ---
 
-## Implemented Features (as of latest commit)
-
-- GitHub OAuth login with allow-list or open registration
-- **Password auth** (optional — enabled when `ENABLE_PASSWORD_LOGIN=true`): email + password login; accounts provisioned via `go run ./cmd/createuser`; bcrypt cost 12; respects the same allow-list / open-registration rules as OAuth
-- Single chat room with real-time SSE messaging
-- Message delete (author only; SSE-broadcast to all clients)
-- Emoji reactions (toggle; preset popover + full picker; SSE-broadcast)
-- Emoji shortcode autocomplete (`:thumbs` → dropdown in textarea)
-- @mention autocomplete (`@Name` → dropdown of room members; `GET /rooms/{id}/members`)
-- Link preview unfurls via Microlink (async; Redis-cached)
-- Media attachments: paste, drag-drop, file picker → presigned S3 PUT
-- Fenced code blocks with syntax highlighting and copy button
-- Infinite scroll (sentinel div, `hx-trigger="revealed"`)
-- Auto-scroll to bottom; pauses when user has scrolled up
-- Auto-reload on deploy (SSE `version` event; respects focus state)
-- Light/dark/auto theme toggle (persisted in localStorage)
-- Cache-busted static assets (`?v=<gitSHA>`)
-- Keyboard-centric navigation: textarea auto-focus on load; `ArrowUp` on empty textarea enters message navigation mode (`message--active` CSS outline); `ArrowDown` exits nav at the last message; `Escape` cancels open edit or clears nav and returns to textarea; `e` opens edit on the active message (owner only); `d` deletes with `window.confirm()` (owner only)
-- **Web Push notifications** (VAPID; optional — enabled when `VAPID_*` env vars set):
-  - User-triggered opt-in: bell icon in header → `Notification.requestPermission()` → subscribe
-  - Service Worker at `/sw.js` (root scope, no-cache); suppresses OS notification when a tab is visible
-  - Multi-tab BroadcastChannel leader election: most-recently-active tab wins; only leader plays chime
-  - In-tab chime (`/static/chime.mp3`) plays when tab is leader and `document.hidden`
-  - Mute/DND: server-side in Redis; durations: 1h / 8h / 24h / 1 week / indefinite; bell shows Zzz state
-  - @mention-aware push: title says "X mentioned you" for direct `@Name` mentions
-  - Expired subscriptions (410 from push service) auto-deleted from Redis
-
----
-
 ## Project Layout
 
 ```
@@ -75,7 +40,8 @@ internal/
   handler/
     rooms.go                   # GET / → redirect /rooms/bemro; GET /rooms/{id}
     messages.go                # POST /rooms/{id}/messages (204); GET /rooms/{id}/messages (history)
-                               #   DELETE /rooms/{id}/messages/{msgID} (author-only)
+                               #   PATCH /rooms/{id}/messages/{msgID} (author-only edit, 204)
+                               #   DELETE /rooms/{id}/messages/{msgID} (author-only, 204)
                                #   hydrateMessages() — user+unfurl+reactions per message
                                #   sendPushNotifications() — async Web Push after save
     notifications.go           # Push subscribe/unsubscribe, mute, VAPID key, room members
@@ -95,6 +61,10 @@ internal/
     sender.go                  # Sender: Send(), SendToMany(); Config (VAPID keys)
   tmpl/
     render.go                  # Renderer; funcMap (renderText, linkify, reactionData, …); ChromaCSS
+  testutil/
+    testutil.go                # NewTestServer, NewTestServerWithPush, AuthCookie, SeedRoom, NoRedirectClient
+  browser/
+    browser_test.go            # E2E browser tests (go-rod / headless Chromium)
 web/
   templates/
     base.html                  # Layout: HTMX, SSE ext, emoji-picker-element; theme/emoji/copy JS
@@ -108,7 +78,6 @@ web/
   static/
     style.css                  # All styles
     favicon.svg
-    logo_square_256.png
     sw.js                      # Service Worker (served at /sw.js, root scope, no-cache)
     chime.mp3                  # In-tab notification chime sound
 cmd/
@@ -134,7 +103,8 @@ GET  /rooms/{id}                           — room page (last 50 msgs)
 GET  /rooms/{id}/events                    — SSE stream (Redis Pub/Sub)
 POST /rooms/{id}/messages                  — post message → 204 (SSE delivers to all)
 GET  /rooms/{id}/messages?before=<ms>&limit=50  — paginated history partial
-DELETE /rooms/{id}/messages/{msgID}        — delete own message → 204 + SSE delete event
+PATCH   /rooms/{id}/messages/{msgID}       — edit own message → 204 + SSE edit event
+DELETE  /rooms/{id}/messages/{msgID}       — delete own message → 204 + SSE delete event
 POST /rooms/{id}/messages/{msgID}/reactions — toggle emoji reaction → 204 + SSE reaction event
 GET  /rooms/{id}/members                   — room member list for @mention autocomplete
 GET  /rooms/{id}/upload-url?hash=&content_type=&content_length=  — presign S3 PUT (optional)
@@ -182,8 +152,7 @@ email_index:{email}                     String  canonical uuid; no TTL; written 
 
 - `users:{uuid}` has no `provider` field — provider is identity-level, not user-level.
 - Name and avatar are seeded from the first provider login and refreshed on each subsequent login via the same provider.
-- Email is seeded from the first provider login and **never overwritten automatically**. Manual change will be possible via a future profile page.
-- Email is **sensitive**: it must only be exposed by profile-page endpoints (not yet implemented). Do not include it in session hashes, SSE payloads, or any response not explicitly scoped to the authenticated user's own profile.
+- Email is **sensitive**: must only be exposed by profile-page endpoints (not yet implemented). Do not include it in session hashes, SSE payloads, or any response not scoped to the authenticated user's own profile.
 - Linking a second provider is done explicitly by a logged-in user (via `redis.LinkIdentity`); there is no automatic email-based merge.
 
 ---
@@ -197,6 +166,7 @@ All payloads published to `rooms:{id}:events` use a prefix to identify type:
 "unfurl:<msgId>:<html>"  → event: unfurl    (JS: innerHTML on #preview-<msgId>)
 "reaction:<json>"        → event: reaction  (JS: JSON { msgId, reactorId, reactedEmojis, html })
 "delete:<msgId>"         → event: delete    (JS: remove #msg-<msgId>)
+"edit:<msgId>:<html>"    → event: edit      (JS: replace #msg-<msgId> innerHTML)
 ```
 
 On connect the server also sends:
@@ -212,18 +182,18 @@ Used by the client to detect deploys and trigger a reload.
 The room page opens **two** `EventSource` connections to the same `/rooms/{id}/events` endpoint:
 
 1. **HTMX-managed** (`sse-connect` on `<section>`): handles `event: message` only via `sse-swap`.
-2. **Vanilla JS-managed** (in `room.html` `<script>`): handles `unfurl`, `reaction`, `delete`, and `version`.
+2. **Vanilla JS-managed** (in `room.html` `<script>`): handles `unfurl`, `reaction`, `delete`, `edit`, and `version`.
 
-Rationale: HTMX's SSE extension silently drops event types it is not `sse-swap`-ing. A dedicated native `EventSource` handles all non-message events cleanly.
+Rationale: HTMX's SSE extension silently drops event types it is not `sse-swap`-ing.
 
 ---
 
 ## Message ID Format
 
 ```
-{unixMillis}-{userID}
+{unixMillis}-{userUUID}
 ```
-e.g. `1712345678901-github:12345678`. Both uniquely identifies the message and encodes the creation timestamp.
+e.g. `1712345678901-550e8400-e29b-41d4-a716-446655440000`. The user portion is always a UUID v4 — never a provider-specific identifier.
 
 ---
 
@@ -243,11 +213,11 @@ S3 key format: `rooms/{roomID}/{unixMs}-{userID}/{hash}.{ext}`
 
 ## SSE Broadcast Neutrality
 
-SSE HTML is sent to **every** connected client verbatim, so it must never contain per-viewer state. Two patterns enforce this:
+SSE HTML is sent to **every** connected client verbatim — it must never contain per-viewer state.
 
 **Reactions** — broadcast as neutral HTML (no `ReactedByMe` baked in) plus the reacting user's emoji list. Each client applies its own active state from `__myReactions` in JS, then calls `htmx.process()` on the swapped element.
 
-**Owner controls (edit/delete buttons)** — buttons are always rendered in `message.html` but with `hidden` attribute by default. The SSE publish in `HandlePost` and `HandleEdit` always passes `CurrentUserID: ""`. After every DOM insertion (page load, SSE `message` event, SSE `edit` event, infinite-scroll history swap), the client calls `applyOwnerControls(articleEl)` which compares `articleEl.dataset.authorId` against `window.__currentUserID` and removes the `hidden` attribute when they match. This is the same "neutral broadcast + client personalisation" pattern as reactions.
+**Owner controls (edit/delete buttons)** — always rendered in `message.html` with `hidden` by default. SSE publishes always pass `CurrentUserID: ""`. After every DOM insertion the client calls `applyOwnerControls(articleEl)`, which compares `articleEl.dataset.authorId` against `window.__currentUserID` and removes `hidden` when they match.
 
 ---
 
@@ -260,20 +230,28 @@ SSE HTML is sent to **every** connected client verbatim, so it must never contai
 - `context.Context` is threaded through all Redis and HTTP calls for proper cancellation.
 - `middleware.UserFromContext(ctx)` retrieves the authenticated user; always available in protected routes.
 - `model.MessageView` wraps `*model.Message` + `CurrentUserID` for templates that conditionally render owner-only controls.
-- The `Renderer.RenderString()` method renders partials (SSE fragments) without the base layout and without wrapping in `pageData`.
+- `Renderer.RenderString()` renders partials (SSE fragments) without the base layout and without wrapping in `pageData`.
 - `Renderer.Render()` wraps data in `pageData{BuildVersion, Data}` — templates access `.Data.*` and `.BuildVersion`.
+- New templates must be registered in `tmpl.New()` in `internal/tmpl/render.go`.
 
 ### CDN Policy
 jsDelivr only. No other CDN without deliberate decision.
 
-```
-https://cdn.jsdelivr.net/npm/htmx.org@2/dist/htmx.min.js
-https://cdn.jsdelivr.net/npm/htmx-ext-sse@2/sse.js
-https://cdn.jsdelivr.net/npm/emoji-picker-element/+esm
-```
-
 ### No build step
 No webpack, vite, or any frontend bundler. No TypeScript compilation. No Tailwind. Static files are embedded via `//go:embed web`.
+
+---
+
+## Decisions & Constraints
+
+- **GitHub OAuth only.** Handler rejects non-GitHub providers. Don't add Google/Discord without a deliberate decision.
+- **No room-creation UI.** Rooms are seeded at startup only (`SeedRoom` in `main.go`). `bemro` is the only active room.
+- **No ORM. No SQL.** Redis only, through `internal/redis/client.go`.
+- **No client-side routing.** Every navigation is a full or partial (HTMX) page load.
+- **Sessions TTL: 90 days** — cookie + Redis TTL kept in sync; refreshed on every authenticated request.
+- **Message TTL: 30 days** — both the Hash and the sorted-set entry are cleaned up.
+- **Syntax highlighting** uses Chroma (server-side). CSS generated at startup for `github` (light) and `github-dark` (dark) themes; served from `/static/chroma.css`; integrates with the `[data-theme]` attribute system.
+- **Emoji shortcode autocomplete** uses `emoji-picker-element`'s `Database` class exposed as `window.__EmojiDatabase` from the module script in `base.html`. The room page polls for it with `setInterval`.
 
 ---
 
@@ -289,8 +267,6 @@ ALLOW_LIST             comma-separated emails permitted to log in
 
 GITHUB_CLIENT_ID
 GITHUB_CLIENT_SECRET
-
-# Google and Discord OAuth vars are documented but NOT yet implemented.
 
 MICROLINK_API_KEY      optional; only needed above Microlink free-tier limits
 
@@ -311,15 +287,12 @@ ENABLE_PASSWORD_LOGIN  "true" to enable email+password login; unset/false = comp
 
 ## Icon Generation
 
-PWA icons (`logo_192.png`, `logo_512.png`) are generated from `favicon.svg` using `rsvg-convert`.
-Do **not** regenerate from `logo_square_256.png` — use the SVG as the source of truth.
+PWA icons are generated from `favicon.svg` using `rsvg-convert`. Do **not** use `logo_square_256.png` as source — the SVG is the source of truth.
 
 Parameters (chosen via visual review — do not change without re-reviewing):
-- **Background:** `#5865f2` rounded square, `rx="22.5"` on a 100×100 canvas (~22.5% iOS-style radius)
-- **Padding:** 15% each side (logo occupies 70×70 units of the 100-unit canvas)
-- **Vertical optical nudge:** +4.5 canvas units downward (the bubble tail makes the logo look high without this)
+- Background: `#5865f2` rounded square, `rx="22.5"` on 100×100 canvas
+- Padding: 15% each side; vertical optical nudge: +4.5 units downward
 
-Regeneration command (run from project root):
 ```sh
 python3 - <<'EOF'
 import subprocess
@@ -345,42 +318,7 @@ EOF
 
 ---
 
-## Decisions & Constraints
-
-- **GitHub OAuth only.** `GOOGLE_CLIENT_ID` / `DISCORD_CLIENT_ID` are documented in the original spec but the handler rejects non-GitHub providers. Don't add them without a deliberate decision.
-- **No room-creation UI.** Rooms are seeded at startup only (`SeedRoom` in `main.go`). The `bemro` room is the only active room.
-- **No ORM.** Redis commands only, through `internal/redis/client.go`.
-- **No SQL.** Redis is the only data store.
-- **No client-side routing.** Every navigation is a full or partial (HTMX) page load.
-- **Sessions TTL: 90 days** (cookie + Redis TTL are kept in sync; refreshed on every authenticated request).
-- **Message TTL: 30 days.** Both the Hash and the sorted-set entry are cleaned up.
-- **Syntax highlighting** uses Chroma (server-side). CSS is generated at startup for `github` (light) and `github-dark` (dark) themes and served dynamically from `/static/chroma.css`. The CSS integrates with the `[data-theme]` attribute system.
-- **Emoji shortcode autocomplete** uses `emoji-picker-element`'s `Database` class exposed as `window.__EmojiDatabase` from the module script in `base.html`. The room page polls for it with `setInterval`.
-
----
-
-## What to Avoid
-
-- Do not return HTML from `POST /rooms/{id}/messages`. SSE delivers to everyone.
-- Do not add raw Redis commands outside `internal/redis/client.go`.
-- Do not add a SQL database or ORM.
-- Do not add a frontend build step.
-- Do not load assets from CDNs other than jsDelivr.
-- Do not add room-creation UI or a multi-room sidebar (sidebar code is commented out in `room.html`).
-- Do not add Google or Discord OAuth without a deliberate decision.
-
----
-
-## Running Locally
-
-```sh
-# All services (app + Redis + RedisInsight + MinIO)
-docker compose up
-
-# Or just Redis, then run Go directly with air (live reload):
-docker compose up redis
-air
-```
+## Build
 
 Build version is injected at build time:
 ```sh
@@ -391,58 +329,22 @@ go build -ldflags "-X main.buildVersion=$(git rev-parse --short HEAD)" .
 
 ## Testing
 
-### Go HTTP integration tests (primary layer)
-
-No external services required — all tests use **miniredis** (in-process Redis).
-
 ```sh
-# Run all tests (Go + Playwright when e2e/ exists)
-make test
-
-# Go tests only
-make test-go
-
-# Playwright only (skips silently when e2e/ not set up)
-make test-e2e
-
-# Run a single Go package directly
-go test ./internal/handler/... -v
-go test ./internal/redis/... -v
-go test ./internal/auth/... -v
+make test                                              # lint + Go (short) + E2E browser
+go test ./... -race -timeout 60s -count=1 -short      # unit/integration only
+go test ./internal/browser/... -v -timeout 120s       # E2E browser (go-rod / headless Chromium)
+npm run lint                                           # JS linting (Biome)
 ```
 
-**Test packages and what they cover:**
-
-| Package | File | Scenarios |
-|---|---|---|
-| `internal/handler` | `messages_test.go` | POST→204, empty text→200, unauthenticated→302, pub/sub payload contains `msg:`, DELETE own→204, DELETE other→403, DELETE unknown→404, PATCH own→204, PATCH other→403, PATCH empty→400, history before/after pagination |
-| `internal/handler` | `rooms_test.go` | GET room→200 with HTML, unauthenticated→302, unknown room→404 |
-| `internal/handler` | `sse_test.go` | initial connect→200 + `text/event-stream` + version event, pub/sub relay via Redis publish |
-| `internal/handler` | `reactions_test.go` | toggle add→204 + pub/sub `reaction:` prefix, toggle off (ReactedByMe drops), invalid emoji→400 |
-| `internal/auth` | `password_test.go` | success→302 + cookie, wrong password→redirect with error, unknown email→same error (anti-enum) |
-| `internal/redis` | `client_test.go` | session round-trip, session TTL via `mr.FastForward`, message pagination (before/after/limit), reaction toggle + zero-count cleanup, ReactedByMe per-user |
-
-**Shared test helper** — `internal/testutil/testutil.go`:
-- `NewTestServer(t)` — miniredis + redis client + full mux + `httptest.Server`; all cleaned up via `t.Cleanup`
+**Shared test helpers** — `internal/testutil/testutil.go`:
+- `NewTestServer(t)` — miniredis + redis client + full mux + `httptest.Server`; all notification routes always wired
+- `NewTestServerWithPush(t, sender)` — same, but wires a push sender for dispatch tests
 - `ts.AuthCookie(t, user)` — seeds a session directly into miniredis, returns signed cookie
 - `ts.SeedRoom(t, room)` — seeds a room record
-- `testutil.NoRedirectClient()` — `*http.Client` that stops at 302 (use for login flow tests)
-- Templates loaded from `../../web` (relative to the test package's CWD, which Go sets to the package directory)
+- `testutil.NoRedirectClient()` — `*http.Client` that stops at 302
 
 **Key patterns:**
-- `POST /rooms/{id}/messages` (and DELETE, PATCH, reaction toggle) returns **204** with no body; HTML is published to Redis pub/sub and delivered via SSE. Tests assert the 204 status and verify the pub/sub payload separately by subscribing before issuing the request.
-- SSE pub/sub relay test: read initial events first (handler flushes before subscribing), then `time.Sleep(50ms)` to let the subscription register, then publish.
+- POST/DELETE/PATCH/reaction toggle all return **204**; tests assert status + verify pub/sub payload by subscribing before issuing the request.
+- SSE pub/sub relay: read initial events first, then `time.Sleep(50ms)` to let the subscription register, then publish.
 - Password tests use `bcrypt.MinCost` for speed.
-- Two-user tests (ownership checks) create two users in the same miniredis instance.
-
----
-
-## Definition of Done (per feature)
-
-- Renders correctly with HTMX; no full-page reloads where a partial is expected.
-- `POST` actions return `204`; all state changes delivered via SSE.
-- No secrets committed; all config via env vars.
-- Redis keys follow the schema above.
-- New env vars documented in this file.
-- New templates registered in `tmpl.New()` in `internal/tmpl/render.go`.
-- `make test` passes with no failures.
+- Browser SW tests: set up `browser.EachEvent` **before** calling `proto.ServiceWorkerEnable{}.Call(page)` to avoid missing the `workerVersionUpdated` event.
