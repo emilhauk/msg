@@ -19,6 +19,26 @@ document.body.addEventListener('htmx:afterSwap', (e) => {
   // are siblings. We re-scan the whole list to catch all newly added articles.
   if (e.detail.elt?.classList?.contains('scroll-sentinel')) {
     document.querySelectorAll('#message-list-content article.message').forEach(applyOwnerControls);
+    document.getElementById('history-spinner')?.classList.remove('is-loading');
+  }
+});
+
+// Show spinner when the scroll-sentinel fires an HTMX history request.
+document.body.addEventListener('htmx:beforeRequest', (e) => {
+  if (e.detail.elt?.classList?.contains('scroll-sentinel')) {
+    document.getElementById('history-spinner')?.classList.add('is-loading');
+  }
+});
+
+// Hide spinner on network/response errors from the sentinel.
+document.body.addEventListener('htmx:responseError', (e) => {
+  if (e.detail.elt?.classList?.contains('scroll-sentinel')) {
+    document.getElementById('history-spinner')?.classList.remove('is-loading');
+  }
+});
+document.body.addEventListener('htmx:sendError', (e) => {
+  if (e.detail.elt?.classList?.contains('scroll-sentinel')) {
+    document.getElementById('history-spinner')?.classList.remove('is-loading');
   }
 });
 
@@ -726,24 +746,36 @@ function applyMyReactions(barEl, msgId) {
   let __pendingReload = false;
 
   async function doCatchUp() {
+    const spinner = document.getElementById('history-spinner');
+    spinner?.classList.add('is-loading');
     let res;
     try {
       res = await fetch(`/rooms/${roomID}/messages?limit=50`);
     } catch (_) {
+      spinner?.classList.remove('is-loading');
       return;
     }
-    if (!res.ok) return;
+    if (!res.ok) {
+      spinner?.classList.remove('is-loading');
+      return;
+    }
 
     const html = await res.text();
     const temp = document.createElement('div');
     temp.innerHTML = html;
 
     const newArticles = [...temp.querySelectorAll('article.message')];
-    if (newArticles.length === 0) return;
+    if (newArticles.length === 0) {
+      spinner?.classList.remove('is-loading');
+      return;
+    }
 
     const content = document.getElementById('message-list-content');
     const target = document.getElementById('sse-message-target');
-    if (!content || !target) return;
+    if (!content || !target) {
+      spinner?.classList.remove('is-loading');
+      return;
+    }
 
     const hasOverlap = newArticles.some(a => document.getElementById(a.id));
 
@@ -770,6 +802,8 @@ function applyMyReactions(barEl, msgId) {
     // Snap to bottom so the user sees the freshest messages.
     const list = document.getElementById('message-list');
     if (list) list.scrollTop = list.scrollHeight;
+
+    spinner?.classList.remove('is-loading');
   }
 
   es.addEventListener('version', (e) => {
