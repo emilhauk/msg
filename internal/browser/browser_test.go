@@ -639,3 +639,135 @@ func TestThemeToggle_LightOS(t *testing.T) {
 	theme := page.MustEval(`() => document.documentElement.getAttribute('data-theme')`).Str()
 	assert.Equal(t, "dark", theme, "first click on light OS should set data-theme to 'dark'")
 }
+
+// ---------------------------------------------------------------------------
+// Duplicate-message regression tests
+// ---------------------------------------------------------------------------
+
+// TestNoDuplicates_SSEReconnect verifies that the catch-up logic triggered on
+// SSE reconnect does not duplicate messages already visible in the DOM.
+//
+// When the vanilla JS EventSource reconnects and receives the same build SHA
+// it previously saw, it calls doCatchUp() which fetches the latest messages
+// and merges them into the DOM. Any message whose ID already exists as an
+// element is skipped. This test confirms that deduplication guard works.
+func TestNoDuplicates_SSEReconnect(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping browser test in short mode")
+	}
+	const dupRoom = "room-dup-reconnect"
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: dupRoom, Name: "Dup Reconnect Room"})
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), alice))
+
+	// Seed 3 messages with distinct millisecond timestamps.
+	base := time.Now().UnixMilli()
+	for i := 0; i < 3; i++ {
+		ms := base + int64(i)
+		require.NoError(t, ts.Redis.SaveMessage(context.Background(), model.Message{
+			ID:          fmt.Sprintf("%d-%s", ms, aliceUserID),
+			RoomID:      dupRoom,
+			UserID:      aliceUserID,
+			Text:        fmt.Sprintf("message %d", i+1),
+			CreatedAt:   time.UnixMilli(ms),
+			CreatedAtMS: fmt.Sprintf("%d", ms),
+		}))
+	}
+
+	b := newBrowser(t)
+	page := authPage(t, b, ts, alice, dupRoom)
+
+	// Messages are server-side rendered — all 3 should be in the DOM immediately.
+	before := page.MustElements("#message-list-content article.message")
+	require.Len(t, before, 3, "expected 3 articles on initial load")
+
+	// Wait for both EventSource connections to register their Redis subscriptions.
+	time.Sleep(300 * time.Millisecond)
+
+	// Publishing "version:test" matches the server's build version in test mode
+	// (testutil wires the SSE handler with Version:"test"). The vanilla JS
+	// EventSource sees this as a same-SHA reconnect event and calls doCatchUp().
+	require.NoError(t, ts.Redis.Publish(context.Background(), dupRoom, "version:test"))
+
+	// Allow the async doCatchUp fetch to complete and the DOM to settle.
+	time.Sleep(1500 * time.Millisecond)
+
+	after := page.MustElements("#message-list-content article.message")
+	assert.Len(t, after, 3, "doCatchUp must not duplicate messages already visible in DOM")
+}
+
+// TestNoDuplicates_Scrollback verifies that loading message history via the
+// infinite-scroll sentinel does not produce duplicate articles in the DOM.
+//
+// The initial page load renders the latest 50 messages. When more exist, a
+// scroll-sentinel is present. Triggering it fetches older messages and swaps
+// them in via HTMX. This test seeds 55 messages and confirms that after the
+// history load all 55 articles are present exactly once.
+func TestNoDuplicates_Scrollback(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping browser test in short mode")
+	}
+	const scrollRoom = "room-dup-scroll"
+	const total = 55 // more than the 50-message initial load cap
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: scrollRoom, Name: "Dup Scroll Room"})
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), alice))
+
+	// Seed 55 messages with distinct millisecond timestamps.
+	base := time.Now().UnixMilli()
+	for i := 0; i < total; i++ {
+		ms := base + int64(i)
+		require.NoError(t, ts.Redis.SaveMessage(context.Background(), model.Message{
+			ID:          fmt.Sprintf("%d-%s", ms, aliceUserID),
+			RoomID:      scrollRoom,
+			UserID:      aliceUserID,
+			Text:        fmt.Sprintf("message %d", i+1),
+			CreatedAt:   time.UnixMilli(ms),
+			CreatedAtMS: fmt.Sprintf("%d", ms),
+		}))
+	}
+
+	b := newBrowser(t)
+	page := authPage(t, b, ts, alice, scrollRoom)
+
+	// Initial load renders the latest 50 messages server-side.
+	initial := page.MustElements("#message-list-content article.message")
+	require.Len(t, initial, 50, "expected 50 articles from initial load")
+
+	// A scroll-sentinel must be present since there are more messages above.
+	page.Timeout(3 * time.Second).MustElement(".scroll-sentinel")
+
+	// Trigger the sentinel directly via htmx.trigger so we don't depend on
+	// HTMX's polling interval detecting the element in the headless viewport.
+	// This dispatches the same 'revealed' DOM event that HTMX fires internally
+	// when its setInterval determines the element is scrolled into view — the
+	// full hx-get / hx-swap="beforebegin" path is exercised identically.
+	page.MustEval(`() => {
+		const s = document.querySelector('.scroll-sentinel');
+		if (s) htmx.trigger(s, 'revealed');
+	}`)
+
+	// Poll until all 55 articles are present (up to 8 s).
+	deadline := time.Now().Add(8 * time.Second)
+	for time.Now().Before(deadline) {
+		n := page.MustEval(`() => document.querySelectorAll('#message-list-content article.message').length`).Int()
+		if n >= total {
+			break
+		}
+		time.Sleep(200 * time.Millisecond)
+	}
+
+	articles := page.MustElements("#message-list-content article.message")
+	assert.Len(t, articles, total, "scrollback should add the missing messages without duplicates")
+
+	// Verify uniqueness: every article ID must appear exactly once.
+	seen := make(map[string]bool, len(articles))
+	for _, el := range articles {
+		id, attrErr := el.Attribute("id")
+		require.NoError(t, attrErr)
+		if assert.NotNil(t, id, "article element is missing its id attribute") {
+			assert.False(t, seen[*id], "duplicate message found in DOM: %s", *id)
+			seen[*id] = true
+		}
+	}
+}
