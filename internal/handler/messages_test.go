@@ -448,6 +448,68 @@ func TestHandlePost_PushExpiredSubscription(t *testing.T) {
 	t.Fatal("expired subscription was not cleaned up within 2s")
 }
 
+func TestHandlePost_PushSkipsActiveRecipient(t *testing.T) {
+	received := make(chan struct{}, 10)
+	fakePush := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		received <- struct{}{}
+	}))
+	defer fakePush.Close()
+
+	sender := buildPushSender(t)
+	ts := testutil.NewTestServerWithPush(t, sender)
+	ts.SeedRoom(t, model.Room{ID: testRoom, Name: "Test Room"})
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), bob))
+	require.NoError(t, ts.Redis.TouchRoomMember(context.Background(), testRoom, alice.ID))
+	require.NoError(t, ts.Redis.TouchRoomMember(context.Background(), testRoom, bob.ID))
+
+	subJSON := bobSubscriptionJSON(t, fakePush.URL)
+	require.NoError(t, ts.Redis.SavePushSubscription(context.Background(), bob.ID, fakePush.URL, subJSON))
+
+	// Mark bob as actively viewing the room.
+	require.NoError(t, ts.Redis.SetRoomViewing(context.Background(), bob.ID, testRoom))
+
+	resp := postMsg(t, ts, alice, "hello bob")
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+	select {
+	case <-received:
+		t.Fatal("push should not be sent to a recipient who is actively viewing the room")
+	case <-time.After(300 * time.Millisecond):
+		// Correct: bob is active, no push sent.
+	}
+}
+
+func TestHandlePost_PushDeliveredToInactiveRecipient(t *testing.T) {
+	received := make(chan struct{}, 10)
+	fakePush := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusCreated)
+		received <- struct{}{}
+	}))
+	defer fakePush.Close()
+
+	sender := buildPushSender(t)
+	ts := testutil.NewTestServerWithPush(t, sender)
+	ts.SeedRoom(t, model.Room{ID: testRoom, Name: "Test Room"})
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), bob))
+	require.NoError(t, ts.Redis.TouchRoomMember(context.Background(), testRoom, alice.ID))
+	require.NoError(t, ts.Redis.TouchRoomMember(context.Background(), testRoom, bob.ID))
+
+	subJSON := bobSubscriptionJSON(t, fakePush.URL)
+	require.NoError(t, ts.Redis.SavePushSubscription(context.Background(), bob.ID, fakePush.URL, subJSON))
+
+	// Bob has no viewing key → push should be delivered.
+	resp := postMsg(t, ts, alice, "hello bob")
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+	select {
+	case <-received:
+		// Correct: bob has no viewing key, push delivered.
+	case <-time.After(2 * time.Second):
+		t.Fatal("push notification not delivered within 2s")
+	}
+}
+
 func TestHandlePost_MentionNotification(t *testing.T) {
 	// Use a channel to signal push delivery in a race-free way.
 	received := make(chan struct{}, 10)

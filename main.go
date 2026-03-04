@@ -217,6 +217,8 @@ func main() {
 	mux.Handle("PATCH /rooms/{id}/messages/{msgID}", authMW(http.HandlerFunc(messagesHandler.HandleEdit)))
 	mux.Handle("POST /rooms/{id}/messages/{msgID}/reactions", authMW(http.HandlerFunc(reactionsHandler.HandleToggle)))
 	mux.Handle("GET /rooms/{id}/members", authMW(http.HandlerFunc(notificationsHandler.HandleRoomMembers)))
+	mux.Handle("POST /rooms/{id}/active", authMW(http.HandlerFunc(notificationsHandler.HandleRoomActive)))
+	mux.Handle("POST /rooms/{id}/inactive", authMW(http.HandlerFunc(notificationsHandler.HandleRoomInactive)))
 
 	// Push notification routes.
 	mux.HandleFunc("GET /push/vapid-public-key", notificationsHandler.HandleVAPIDPublicKey)

@@ -107,6 +107,8 @@ PATCH   /rooms/{id}/messages/{msgID}       — edit own message → 204 + SSE ed
 DELETE  /rooms/{id}/messages/{msgID}       — delete own message → 204 + SSE delete event
 POST /rooms/{id}/messages/{msgID}/reactions — toggle emoji reaction → 204 + SSE reaction event
 GET  /rooms/{id}/members                   — room member list for @mention autocomplete
+POST /rooms/{id}/active                    — record user as actively viewing room (updates last_active + viewing key)
+POST /rooms/{id}/inactive                  — clear viewing key immediately (called via sendBeacon on hide)
 GET  /rooms/{id}/upload-url?hash=&content_type=&content_length=  — presign S3 PUT (optional)
 
 GET  /push/vapid-public-key                — VAPID public key (unauthenticated)
@@ -142,6 +144,8 @@ messages:{msg-id}                       Hash    id, room_id, user_id, text, atta
 reactions:{msg-id}                      Hash    emoji → count; TTL 30 days
 reactions:{msg-id}:users                Hash    "{emoji}\x00{userID}" → "1"; TTL 30 days
 unfurls:{sha256-of-url}                 String  JSON Unfurl or "null"; TTL 24h (success) / 15 min (failure)
+users:{uuid}:rooms:{roomId}:last_active String  unix ms timestamp; TTL 30 days (reset on each write)
+users:{uuid}:rooms:{roomId}:viewing    String  "1"; TTL 90 s; reset by heartbeat every 60 s; cleared immediately by leave beacon
 users:{uuid}:password                   String  bcrypt hash (cost 12); no TTL; only set for password-auth accounts
 email_index:{email}                     String  canonical uuid; no TTL; written by createuser CLI
 ```

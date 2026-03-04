@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"strconv"
@@ -625,6 +626,59 @@ func (c *Client) GetMuteUntil(ctx context.Context, userID string) (until time.Ti
 		return time.Time{}, false, nil
 	}
 	return t, true, nil
+}
+
+// ---------------------------------------------------------------------------
+// Room activity (last_active / read cursor)
+// ---------------------------------------------------------------------------
+
+// SetRoomLastActive records the current time as the user's last-active timestamp
+// for a room. TTL is 30 days (matching message TTL) so the value survives after
+// the session ends and can be used for future unread-count work.
+func (c *Client) SetRoomLastActive(ctx context.Context, userID, roomID string) error {
+	key := "users:" + userID + ":rooms:" + roomID + ":last_active"
+	val := strconv.FormatInt(time.Now().UnixMilli(), 10)
+	return c.rdb.Set(ctx, key, val, messageTTL).Err()
+}
+
+// GetRoomLastActive retrieves the last-active timestamp for a user in a room.
+// Returns (zero, false, nil) when no record exists.
+func (c *Client) GetRoomLastActive(ctx context.Context, userID, roomID string) (time.Time, bool, error) {
+	key := "users:" + userID + ":rooms:" + roomID + ":last_active"
+	val, err := c.rdb.Get(ctx, key).Result()
+	if errors.Is(err, goredis.Nil) {
+		return time.Time{}, false, nil
+	}
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	ms, err := strconv.ParseInt(val, 10, 64)
+	if err != nil {
+		return time.Time{}, false, err
+	}
+	return time.UnixMilli(ms), true, nil
+}
+
+// SetRoomViewing records that the user is actively viewing the room.
+// The key expires after roomViewingTTL; the heartbeat must refresh it to keep
+// it alive. When the user leaves (visibilitychange → hidden) the client sends
+// a beacon to clear the key immediately.
+const roomViewingTTL = 90 * time.Second
+
+func (c *Client) SetRoomViewing(ctx context.Context, userID, roomID string) error {
+	key := "users:" + userID + ":rooms:" + roomID + ":viewing"
+	return c.rdb.Set(ctx, key, "1", roomViewingTTL).Err()
+}
+
+func (c *Client) ClearRoomViewing(ctx context.Context, userID, roomID string) error {
+	key := "users:" + userID + ":rooms:" + roomID + ":viewing"
+	return c.rdb.Del(ctx, key).Err()
+}
+
+func (c *Client) IsRoomViewing(ctx context.Context, userID, roomID string) (bool, error) {
+	key := "users:" + userID + ":rooms:" + roomID + ":viewing"
+	exists, err := c.rdb.Exists(ctx, key).Result()
+	return exists > 0, err
 }
 
 // ---------------------------------------------------------------------------
