@@ -771,3 +771,58 @@ func TestNoDuplicates_Scrollback(t *testing.T) {
 		}
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Fast resume tests
+// ---------------------------------------------------------------------------
+
+// TestFastResume_VisibilityChange verifies that when the tab transitions from
+// hidden to visible (device wake / tab un-hide), missed messages are fetched
+// and inserted into the DOM within 250 ms — without waiting for the browser's
+// native EventSource reconnect backoff.
+//
+// The visibilitychange handler in room.js calls doCatchUp() synchronously on
+// the "become visible" transition, which fetches /rooms/{id}/messages and
+// merges any missed messages into the DOM immediately.
+func TestFastResume_VisibilityChange(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping browser test in short mode")
+	}
+	const resumeRoom = "room-resume"
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: resumeRoom, Name: "Resume Test Room"})
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), alice))
+
+	b := newBrowser(t)
+	page := authPage(t, b, ts, alice, resumeRoom)
+
+	// Wait for both EventSource connections to establish their Redis subscriptions.
+	time.Sleep(300 * time.Millisecond)
+
+	// Seed a message directly into Redis — simulates a message sent by another
+	// user while this tab was asleep / backgrounded.
+	msg := seedMessage(t, ts, alice, resumeRoom, "message sent while tab was hidden")
+
+	// Simulate the tab becoming visible: explicitly set document.hidden to false
+	// and dispatch visibilitychange. The handler in room.js calls doCatchUp()
+	// immediately, bypassing any EventSource reconnect backoff.
+	page.MustEval(`() => {
+		Object.defineProperty(document, 'hidden', { get: () => false, configurable: true });
+		document.dispatchEvent(new Event('visibilitychange'));
+	}`)
+
+	// Poll for the seeded message to appear in the DOM. 250 ms is the hard
+	// deadline: fast resume must not rely on EventSource reconnect backoff.
+	deadline := time.Now().Add(250 * time.Millisecond)
+	found := false
+	for time.Now().Before(deadline) {
+		has, _, err := page.Has("#msg-" + msg.ID)
+		require.NoError(t, err)
+		if has {
+			found = true
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	assert.True(t, found, "message seeded during tab hide should appear within 250 ms of visibilitychange")
+}
