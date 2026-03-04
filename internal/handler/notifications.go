@@ -153,6 +153,25 @@ func (h *NotificationsHandler) HandleGetMute(w http.ResponseWriter, r *http.Requ
 	json.NewEncoder(w).Encode(resp) //nolint:errcheck
 }
 
+// HandleRoomActive records that the authenticated user is currently viewing the room.
+// POST /rooms/{id}/active
+func (h *NotificationsHandler) HandleRoomActive(w http.ResponseWriter, r *http.Request) {
+	user := middleware.UserFromContext(r.Context())
+	roomID := r.PathValue("id")
+	_ = h.Redis.SetRoomLastActive(r.Context(), user.ID, roomID)
+	_ = h.Redis.SetRoomViewing(r.Context(), user.ID, roomID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// HandleRoomInactive clears the viewing key so push suppression lifts immediately.
+// POST /rooms/{id}/inactive  (called via navigator.sendBeacon on visibilitychange → hidden)
+func (h *NotificationsHandler) HandleRoomInactive(w http.ResponseWriter, r *http.Request) {
+	user := middleware.UserFromContext(r.Context())
+	roomID := r.PathValue("id")
+	_ = h.Redis.ClearRoomViewing(r.Context(), user.ID, roomID)
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // HandleRoomMembers returns the list of room members for @mention autocomplete.
 // GET /rooms/{id}/members  → [{ id, name, avatar_url }, ...]
 func (h *NotificationsHandler) HandleRoomMembers(w http.ResponseWriter, r *http.Request) {

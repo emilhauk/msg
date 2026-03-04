@@ -107,10 +107,12 @@ func (h *MessagesHandler) HandlePost(w http.ResponseWriter, r *http.Request) {
 		_ = h.Redis.Publish(r.Context(), roomID, "msg:"+html)
 	}
 
-	// Track room membership (scored by time so we know who's recently active).
+	// Track room membership and last-active timestamp.
 	go func() {
 		ctx2 := context.Background()
 		_ = h.Redis.TouchRoomMember(ctx2, roomID, user.ID)
+		_ = h.Redis.SetRoomLastActive(ctx2, user.ID, roomID)
+		_ = h.Redis.SetRoomViewing(ctx2, user.ID, roomID)
 	}()
 
 	// Async unfurl.
@@ -179,6 +181,11 @@ func (h *MessagesHandler) sendPushNotifications(msg model.Message, mentionedName
 		}
 		if muted {
 			continue
+		}
+
+		viewing, err := h.Redis.IsRoomViewing(ctx, memberID, msg.RoomID)
+		if err == nil && viewing {
+			continue // user is actively viewing this room
 		}
 
 		subs, err := h.Redis.GetAllPushSubscriptions(ctx, memberID)

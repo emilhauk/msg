@@ -201,6 +201,43 @@ func TestHandleGetMute_Forever(t *testing.T) {
 	assert.Equal(t, "forever", body["until"])
 }
 
+func TestHandleRoomActive(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: testRoom, Name: "Test Room"})
+	cookie := ts.AuthCookie(t, alice)
+
+	req, _ := http.NewRequest("POST", ts.Server.URL+"/rooms/"+testRoom+"/active", nil)
+	req.AddCookie(cookie)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+	viewing, err := ts.Redis.IsRoomViewing(context.Background(), alice.ID, testRoom)
+	require.NoError(t, err)
+	assert.True(t, viewing, "viewing key should be set after /active")
+}
+
+func TestHandleRoomInactive(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: testRoom, Name: "Test Room"})
+	cookie := ts.AuthCookie(t, alice)
+
+	// Seed a viewing key first.
+	require.NoError(t, ts.Redis.SetRoomViewing(context.Background(), alice.ID, testRoom))
+
+	req, _ := http.NewRequest("POST", ts.Server.URL+"/rooms/"+testRoom+"/inactive", nil)
+	req.AddCookie(cookie)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+	viewing, err := ts.Redis.IsRoomViewing(context.Background(), alice.ID, testRoom)
+	require.NoError(t, err)
+	assert.False(t, viewing, "viewing key should be cleared after /inactive")
+}
+
 func TestHandleRoomMembers(t *testing.T) {
 	ts := testutil.NewTestServer(t)
 	ts.SeedRoom(t, model.Room{ID: testRoom, Name: "Test Room"})
