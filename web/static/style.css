@@ -170,7 +170,7 @@ img { display: block; max-width: 100%; }
 
 .btn--google {
   background: var(--color-google);
-  color: #3c4043;
+  color: var(--color-text);
   border: 1px solid var(--color-google-border);
 }
 .btn--google:hover { background: var(--color-bg-subtle); }

@@ -37,13 +37,15 @@ type oauthIdentity struct {
 
 // Handler holds dependencies for OAuth and session handlers.
 type Handler struct {
-	Redis              *redisclient.Client
-	SessionSecret      []byte
-	BaseURL            string
-	OpenRegistration   bool
-	AllowList          []string // lowercased, trimmed email addresses
-	GitHubClientID     string
-	GitHubClientSecret string
+	Redis               *redisclient.Client
+	SessionSecret       []byte
+	BaseURL             string
+	OpenRegistration    bool
+	AllowList           []string // lowercased, trimmed email addresses
+	GitHubClientID      string
+	GitHubClientSecret  string
+	GoogleClientID      string
+	GoogleClientSecret  string
 }
 
 // checkAccess reports whether the given email is permitted to log in.
@@ -63,25 +65,63 @@ func (h *Handler) checkAccess(email string) bool {
 }
 
 // HandleLogin initiates the OAuth flow for the given provider.
-// Only GitHub is currently supported; all other providers redirect back to /login.
 func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 	provider := r.PathValue("provider")
-	if provider != "github" {
+
+	var authURL string
+	switch provider {
+	case "github":
+		if h.GitHubClientID == "" {
+			http.Redirect(w, r, "/login?error=unsupported_provider", http.StatusFound)
+			return
+		}
+		state, err := h.initOAuthState(w, r)
+		if err != nil {
+			return
+		}
+		redirectURI := h.BaseURL + "/auth/github/callback"
+		authURL = fmt.Sprintf(
+			"https://github.com/login/oauth/authorize?client_id=%s&redirect_uri=%s&scope=read%%3Auser+user%%3Aemail&state=%s",
+			url.QueryEscape(h.GitHubClientID),
+			url.QueryEscape(redirectURI),
+			url.QueryEscape(state),
+		)
+	case "google":
+		if h.GoogleClientID == "" {
+			http.Redirect(w, r, "/login?error=unsupported_provider", http.StatusFound)
+			return
+		}
+		state, err := h.initOAuthState(w, r)
+		if err != nil {
+			return
+		}
+		redirectURI := h.BaseURL + "/auth/google/callback"
+		authURL = fmt.Sprintf(
+			"https://accounts.google.com/o/oauth2/v2/auth?client_id=%s&redirect_uri=%s&response_type=code&scope=openid+email+profile&state=%s",
+			url.QueryEscape(h.GoogleClientID),
+			url.QueryEscape(redirectURI),
+			url.QueryEscape(state),
+		)
+	default:
 		http.Redirect(w, r, "/login?error=unsupported_provider", http.StatusFound)
 		return
 	}
+	http.Redirect(w, r, authURL, http.StatusFound)
+}
 
+// initOAuthState generates a CSRF state, stores it in Redis, sets the state
+// cookie, and returns the state string. On error it writes an HTTP 500 and
+// returns a non-nil error so the caller can return immediately.
+func (h *Handler) initOAuthState(w http.ResponseWriter, r *http.Request) (string, error) {
 	state, err := generateState()
 	if err != nil {
 		http.Error(w, "failed to generate state", http.StatusInternalServerError)
-		return
+		return "", err
 	}
 	if err := h.Redis.SetOAuthState(r.Context(), state); err != nil {
 		http.Error(w, "failed to store state", http.StatusInternalServerError)
-		return
+		return "", err
 	}
-
-	// Store state in a short-lived cookie so we can verify it on callback.
 	http.SetCookie(w, &http.Cookie{
 		Name:     "oauth_state",
 		Value:    state,
@@ -90,21 +130,13 @@ func (h *Handler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   600, // 10 minutes
 	})
-
-	redirectURI := h.BaseURL + "/auth/github/callback"
-	authURL := fmt.Sprintf(
-		"https://github.com/login/oauth/authorize?client_id=%s&redirect_uri=%s&scope=read%%3Auser+user%%3Aemail&state=%s",
-		url.QueryEscape(h.GitHubClientID),
-		url.QueryEscape(redirectURI),
-		url.QueryEscape(state),
-	)
-	http.Redirect(w, r, authURL, http.StatusFound)
+	return state, nil
 }
 
 // HandleCallback handles the OAuth provider callback.
 func (h *Handler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 	provider := r.PathValue("provider")
-	if provider != "github" {
+	if provider != "github" && provider != "google" {
 		http.Redirect(w, r, "/login?error=unsupported_provider", http.StatusFound)
 		return
 	}
@@ -140,16 +172,30 @@ func (h *Handler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	accessToken, err := h.exchangeGitHubCode(r.Context(), code)
-	if err != nil {
-		http.Redirect(w, r, "/login?error=token_exchange", http.StatusFound)
-		return
-	}
-
-	identity, err := h.fetchGitHubUser(r.Context(), accessToken)
-	if err != nil {
-		http.Redirect(w, r, "/login?error=fetch_user", http.StatusFound)
-		return
+	var identity *oauthIdentity
+	switch provider {
+	case "github":
+		accessToken, err := h.exchangeGitHubCode(r.Context(), code)
+		if err != nil {
+			http.Redirect(w, r, "/login?error=token_exchange", http.StatusFound)
+			return
+		}
+		identity, err = h.fetchGitHubUser(r.Context(), accessToken)
+		if err != nil {
+			http.Redirect(w, r, "/login?error=fetch_user", http.StatusFound)
+			return
+		}
+	case "google":
+		accessToken, err := h.exchangeGoogleCode(r.Context(), code)
+		if err != nil {
+			http.Redirect(w, r, "/login?error=token_exchange", http.StatusFound)
+			return
+		}
+		identity, err = h.fetchGoogleUser(r.Context(), accessToken)
+		if err != nil {
+			http.Redirect(w, r, "/login?error=fetch_user", http.StatusFound)
+			return
+		}
 	}
 
 	if !h.checkAccess(identity.Email) {
@@ -336,6 +382,92 @@ func githubGet(ctx context.Context, accessToken, apiURL string, dst any) error {
 		return fmt.Errorf("github API %s: %s", apiURL, string(b))
 	}
 	return json.NewDecoder(resp.Body).Decode(dst)
+}
+
+// exchangeGoogleCode exchanges an authorization code for a Google access token.
+func (h *Handler) exchangeGoogleCode(ctx context.Context, code string) (string, error) {
+	redirectURI := h.BaseURL + "/auth/google/callback"
+	body := url.Values{
+		"client_id":     {h.GoogleClientID},
+		"client_secret": {h.GoogleClientSecret},
+		"code":          {code},
+		"redirect_uri":  {redirectURI},
+		"grant_type":    {"authorization_code"},
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost,
+		"https://oauth2.googleapis.com/token",
+		strings.NewReader(body.Encode()),
+	)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	var result struct {
+		AccessToken string `json:"access_token"`
+		Error       string `json:"error"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+	if result.Error != "" {
+		return "", fmt.Errorf("google: %s", result.Error)
+	}
+	if result.AccessToken == "" {
+		return "", fmt.Errorf("google: empty access token")
+	}
+	return result.AccessToken, nil
+}
+
+// fetchGoogleUser retrieves the authenticated user's profile from the Google
+// userinfo endpoint and returns it as an oauthIdentity.
+func (h *Handler) fetchGoogleUser(ctx context.Context, accessToken string) (*oauthIdentity, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet,
+		"https://www.googleapis.com/oauth2/v3/userinfo", nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("Authorization", "Bearer "+accessToken)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("google userinfo: %s", string(b))
+	}
+
+	var gUser struct {
+		Sub           string `json:"sub"`
+		Name          string `json:"name"`
+		Picture       string `json:"picture"`
+		Email         string `json:"email"`
+		EmailVerified bool   `json:"email_verified"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&gUser); err != nil {
+		return nil, err
+	}
+	if !gUser.EmailVerified {
+		return nil, fmt.Errorf("google: email not verified")
+	}
+
+	return &oauthIdentity{
+		Provider:       "google",
+		ProviderUserID: gUser.Sub,
+		Name:           gUser.Name,
+		AvatarURL:      gUser.Picture,
+		Email:          strings.ToLower(strings.TrimSpace(gUser.Email)),
+	}, nil
 }
 
 // generateState returns a random hex string suitable for use as an OAuth CSRF state.

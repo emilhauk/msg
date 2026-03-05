@@ -106,6 +106,8 @@ func main() {
 		AllowList:          allowList,
 		GitHubClientID:     envOrDefault("GITHUB_CLIENT_ID", ""),
 		GitHubClientSecret: envOrDefault("GITHUB_CLIENT_SECRET", ""),
+		GoogleClientID:     envOrDefault("GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret: envOrDefault("GOOGLE_CLIENT_SECRET", ""),
 	}
 	passwordHandler := &auth.PasswordHandler{
 		Redis:            redis,
@@ -196,6 +198,8 @@ func main() {
 		renderer.Render(w, http.StatusOK, "login.html", map[string]any{
 			"ErrorMsg":            errMsg,
 			"PasswordAuthEnabled": enablePasswordLogin,
+			"GitHubAuthEnabled":   authHandler.GitHubClientID != "",
+			"GoogleAuthEnabled":   authHandler.GoogleClientID != "",
 		})
 	})
 	mux.HandleFunc("GET /auth/{provider}", authHandler.HandleLogin)
