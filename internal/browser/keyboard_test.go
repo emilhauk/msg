@@ -40,6 +40,7 @@ func pressNavKey(page *rod.Page, key string) {
 // The SSE-broadcast path is used because that is where hidden buttons exist in
 // the DOM and the guard matters most.
 func TestKeyboard_E_Ignored_OtherUserMessage(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -79,6 +80,7 @@ func TestKeyboard_E_Ignored_OtherUserMessage(t *testing.T) {
 // TestKeyboard_D_Ignored_OtherUserMessage verifies that pressing 'd' during
 // message navigation does not prompt for deletion on another user's message.
 func TestKeyboard_D_Ignored_OtherUserMessage(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -115,6 +117,7 @@ func TestKeyboard_D_Ignored_OtherUserMessage(t *testing.T) {
 // TestKeyboard_E_Works_OwnMessage verifies that pressing 'e' opens the edit
 // form when the active message belongs to the current user.
 func TestKeyboard_E_Works_OwnMessage(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -149,6 +152,7 @@ func TestKeyboard_E_Works_OwnMessage(t *testing.T) {
 // TestKeyboard_D_Works_OwnMessage verifies that pressing 'd' prompts for
 // deletion when the active message belongs to the current user.
 func TestKeyboard_D_Works_OwnMessage(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}

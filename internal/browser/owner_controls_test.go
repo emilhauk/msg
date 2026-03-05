@@ -24,6 +24,7 @@ func isHidden(t *testing.T, el *rod.Element) bool {
 // TestOwnerControls_InitialLoad verifies that on page load, alice's own
 // messages show the edit button and bob's messages keep it hidden.
 func TestOwnerControls_InitialLoad(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -58,6 +59,7 @@ func TestOwnerControls_InitialLoad(t *testing.T) {
 // via the API and received via SSE shows the edit button in alice's browser.
 // This is the regression test for the htmx:sseMessage vs htmx:afterSwap bug.
 func TestOwnerControls_SSEInsert(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -85,6 +87,7 @@ func TestOwnerControls_SSEInsert(t *testing.T) {
 // TestOwnerControls_SSEInsert_OtherUser verifies that a message posted by bob
 // and received via SSE keeps the edit button hidden in alice's browser.
 func TestOwnerControls_SSEInsert_OtherUser(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}

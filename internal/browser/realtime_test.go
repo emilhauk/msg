@@ -18,6 +18,7 @@ import (
 // TestVersionReload verifies that when the server publishes a new build version
 // via the SSE channel, the page reloads (or shows the update hint).
 func TestVersionReload(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -66,6 +67,7 @@ func TestVersionReload(t *testing.T) {
 // and merges them into the DOM. Any message whose ID already exists as an
 // element is skipped. This test confirms that deduplication guard works.
 func TestNoDuplicates_SSEReconnect(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -118,6 +120,7 @@ func TestNoDuplicates_SSEReconnect(t *testing.T) {
 // them in via HTMX. This test seeds 55 messages and confirms that after the
 // history load all 55 articles are present exactly once.
 func TestNoDuplicates_Scrollback(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -195,6 +198,7 @@ func TestNoDuplicates_Scrollback(t *testing.T) {
 // the "become visible" transition, which fetches /rooms/{id}/messages and
 // merges any missed messages into the DOM immediately.
 func TestFastResume_VisibilityChange(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}

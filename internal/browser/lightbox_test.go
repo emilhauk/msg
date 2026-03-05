@@ -63,6 +63,7 @@ func lightboxSrc(page *rod.Page) string {
 // TestLightbox_OpenClose verifies that clicking an image opens the lightbox and
 // the close button shuts it.
 func TestLightbox_OpenClose(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -84,6 +85,7 @@ func TestLightbox_OpenClose(t *testing.T) {
 
 // TestLightbox_CloseEscape verifies that the Escape key closes the lightbox.
 func TestLightbox_CloseEscape(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -105,6 +107,7 @@ func TestLightbox_CloseEscape(t *testing.T) {
 // TestLightbox_CloseBackdrop verifies that clicking the backdrop (outside the
 // image) closes the lightbox.
 func TestLightbox_CloseBackdrop(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -128,6 +131,7 @@ func TestLightbox_CloseBackdrop(t *testing.T) {
 // TestLightbox_SingleImage_NoNav verifies that the prev/next buttons are hidden
 // when a message contains only one image.
 func TestLightbox_SingleImage_NoNav(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -152,6 +156,7 @@ func TestLightbox_SingleImage_NoNav(t *testing.T) {
 // (not the first), verifies the correct image is shown, then navigates with
 // the prev/next buttons and checks disabled states at the ends.
 func TestLightbox_Navigation(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -198,6 +203,7 @@ func TestLightbox_Navigation(t *testing.T) {
 // TestLightbox_KeyboardNavigation verifies ArrowLeft/ArrowRight and h/l keys
 // navigate between images while the lightbox is open.
 func TestLightbox_KeyboardNavigation(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}

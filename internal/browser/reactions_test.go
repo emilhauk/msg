@@ -41,6 +41,7 @@ func postReaction(t *testing.T, ts *testutil.TestServer, user model.User, room, 
 // to a message, the active styling (reaction-pill--active) appears immediately
 // in their own browser via the SSE reaction event — without requiring a reload.
 func TestReaction_SelfReactionVisibleImmediately(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -71,6 +72,7 @@ func TestReaction_SelfReactionVisibleImmediately(t *testing.T) {
 // to a message, the reaction pill appears in the observer's browser via SSE
 // without requiring a reload, and is not marked active for the observer.
 func TestReaction_OtherUserReactionVisible(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -108,6 +110,7 @@ func TestReaction_OtherUserReactionVisible(t *testing.T) {
 // picker is open in reaction mode posts it as a reaction on the correct message
 // and does NOT insert it into the compose textarea.
 func TestReaction_EmojiGoesToReaction(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -158,6 +161,7 @@ func TestReaction_EmojiGoesToReaction(t *testing.T) {
 // TestReaction_PickerOpensOnClick verifies that clicking the add-reaction button
 // opens the emoji picker (makes it visible).
 func TestReaction_PickerOpensOnClick(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}

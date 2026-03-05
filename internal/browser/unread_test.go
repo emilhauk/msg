@@ -17,6 +17,7 @@ import (
 // while the tab is hidden increments the title prefix and swaps the favicon badge,
 // and that both reset when the tab is re-activated.
 func TestUnreadCount_HiddenTab(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -63,6 +64,7 @@ func TestUnreadCount_HiddenTab(t *testing.T) {
 // TestUnreadCount_OwnMessageIgnored verifies that a message posted by the current
 // user while the tab is hidden does not increment the unread count.
 func TestUnreadCount_OwnMessageIgnored(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}

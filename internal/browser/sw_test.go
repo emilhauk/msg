@@ -20,6 +20,7 @@ const swRoom = "room-sw"
 // TestSW_Registration verifies that the service worker is registered and
 // controls the page after navigating to a room.
 func TestSW_Registration(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -42,6 +43,7 @@ func TestSW_Registration(t *testing.T) {
 // suppress the OS notification (tab-visible suppression logic). We verify that
 // the SW processed the event without crashing and that the page is still usable.
 func TestSW_PushEvent(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}

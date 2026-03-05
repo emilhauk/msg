@@ -27,6 +27,7 @@ func clickThemeToggle(page *rod.Page) {
 // TestThemeToggle_DarkOS verifies that on a dark-mode OS the first click on the
 // theme toggle jumps directly to 'light', skipping 'dark' which is invisible.
 func TestThemeToggle_DarkOS(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
@@ -75,6 +76,7 @@ func TestThemeToggle_DarkOS(t *testing.T) {
 // TestThemeToggle_LightOS verifies that on a light-mode OS the first click on
 // the theme toggle goes to 'dark' (the expected visible change).
 func TestThemeToggle_LightOS(t *testing.T) {
+	t.Parallel()
 	if testing.Short() {
 		t.Skip("skipping browser test in short mode")
 	}
