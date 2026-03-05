@@ -47,6 +47,22 @@ document.body.addEventListener('htmx:sendError', (e) => {
 // that moves more than half a viewport from the bottom. This decouples
 // "user deliberately scrolled up" from "there happens to be distance from
 // the bottom right now" (which is always true while images are still loading).
+
+// Exposed at module scope so image-load handlers outside the IIFE can call it.
+let snapUnlessScrolledUp = () => {};
+
+// Attach onload listeners to any not-yet-loaded images inside a container so
+// that snapUnlessScrolledUp() is called once each image settles. This catches
+// the gap between the ResizeObserver firing (for the CSS aspect-ratio box) and
+// the browser finalising layout after the image bytes arrive.
+function attachImageLoadSnap(container) {
+  container.querySelectorAll('img').forEach((img) => {
+    if (!img.complete) {
+      img.addEventListener('load', snapUnlessScrolledUp, { once: true });
+    }
+  });
+}
+
 (() => {
   const list = document.getElementById('message-list');
   const content = document.getElementById('message-list-content');
@@ -60,9 +76,9 @@ document.body.addEventListener('htmx:sendError', (e) => {
     list.scrollTop = list.scrollHeight;
   }
 
-  function snapUnlessScrolledUp() {
+  snapUnlessScrolledUp = () => {
     if (!userScrolledUp) snapToBottom();
-  }
+  };
 
   // Track deliberate user scrolling. Only flip the flag on actual scroll
   // events — not on programmatic scrollTop assignments.
@@ -104,6 +120,7 @@ document.body.addEventListener('htmx:sendError', (e) => {
     const target = document.getElementById('sse-message-target');
     if (target?.previousElementSibling) {
       applyOwnerControls(target.previousElementSibling);
+      attachImageLoadSnap(target.previousElementSibling);
     }
   });
 })();
@@ -849,9 +866,8 @@ function applyMyReactions(barEl, msgId) {
       const html = e.data.slice(nl + 1);
       const el = document.getElementById(`preview-${msgId}`);
       if (el) {
-        // Just set the HTML — the ResizeObserver will handle scrolling when
-        // the unfurl image loads and the list grows.
         el.innerHTML = html;
+        attachImageLoadSnap(el);
       }
     });
 
