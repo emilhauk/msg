@@ -468,7 +468,7 @@ func TestSW_PushEvent(t *testing.T) {
 	var regID proto.ServiceWorkerRegistrationID
 	regCh := make(chan proto.ServiceWorkerRegistrationID, 1)
 
-	waitVersion := b.EachEvent(func(e *proto.ServiceWorkerWorkerVersionUpdated) bool {
+	waitVersion := page.EachEvent(func(e *proto.ServiceWorkerWorkerVersionUpdated) bool {
 		for _, v := range e.Versions {
 			if v.RegistrationID != "" {
 				regCh <- v.RegistrationID
@@ -480,16 +480,17 @@ func TestSW_PushEvent(t *testing.T) {
 
 	require.NoError(t, proto.ServiceWorkerEnable{}.Call(page))
 
+	// Start the event-processing loop in the background. EachEvent's wait
+	// function must be running for the callback to fire and write to regCh.
+	go waitVersion()
+
 	// Wait for the first version updated event (contains registration ID).
 	select {
 	case regID = <-regCh:
 		// Got the registration ID.
 	case <-time.After(3 * time.Second):
-		// The SW domain may not emit if no SW is installed — skip gracefully.
-		waitVersion()
 		t.Skip("ServiceWorker.workerVersionUpdated not received within 3s — SW may not be installed")
 	}
-	waitVersion() // release the EachEvent goroutine
 
 	// Parse the server origin for the CDP call.
 	parsed, err := url.Parse(ts.Server.URL)
@@ -511,6 +512,11 @@ func TestSW_PushEvent(t *testing.T) {
 		}
 		return false
 	})
+	go waitConsole()
+
+	// Re-enable the ServiceWorker domain — EachEvent's cleanup disabled it after
+	// waitVersion returned.
+	require.NoError(t, proto.ServiceWorkerEnable{}.Call(page))
 
 	// Deliver a synthetic push message via CDP.
 	pushData := `{"title":"Test","body":"Hi","roomId":"` + swRoom + `","url":"/rooms/` + swRoom + `"}`
@@ -531,7 +537,6 @@ func TestSW_PushEvent(t *testing.T) {
 		// Treat as a non-fatal skip rather than a hard failure.
 		t.Log("SW console log not captured within 3s — CDP console forwarding may be unavailable")
 	}
-	waitConsole() // release the EachEvent goroutine
 
 	// Final sanity: the page should still be responsive after the push.
 	val, err = page.Eval(`() => document.readyState`)

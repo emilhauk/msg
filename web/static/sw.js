@@ -27,6 +27,8 @@ self.addEventListener('push', (event) => {
     renotify: true,
   };
 
+  console.log('[sw] push received', title);
+
   event.waitUntil(
     // Check if any tab is currently visible (document.visibilityState === 'visible').
     // clients.matchAll returns all controlled clients (tabs/windows).
