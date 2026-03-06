@@ -14,6 +14,9 @@ if (lightbox) {
   let lastTapTime = 0;
   let pointerMoved = false;
 
+  // Momentum state.
+  let velBuf = [];   // [{t, x, y}, …] — rolling 100 ms window
+
   // Active pointers: Map<pointerId, {x, y}>.
   const ptrs = new Map();
 
@@ -39,9 +42,11 @@ if (lightbox) {
   }
 
   function resetTransform() {
+    lightboxImg.style.transition = '';
     scale = 1; tx = 0; ty = 0;
     pointerMoved = false;
     ptrs.clear();
+    velBuf = [];
     applyTransform();
   }
 
@@ -107,6 +112,8 @@ if (lightbox) {
   // Pointer events on the image for pinch, pan, and swipe.
   lightboxImg.addEventListener('pointerdown', (e) => {
     e.preventDefault();
+    lightboxImg.style.transition = '';
+    velBuf = [];
     if (ptrs.size === 0) pointerMoved = false;
     lightboxImg.setPointerCapture(e.pointerId);
     ptrs.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -179,6 +186,9 @@ if (lightbox) {
         ty = p1Ty0 + dy / scale;
         clampTranslate();
         applyTransform();
+        const now = performance.now();
+        velBuf.push({ t: now, x: e.clientX, y: e.clientY });
+        velBuf = velBuf.filter(p => now - p.t < 100);
       }
     }
   });
@@ -191,6 +201,24 @@ if (lightbox) {
     if (hadCount === 1 && scale === 1) {
       const dx = e.clientX - p1X0;
       if (Math.abs(dx) > 40) dx < 0 ? next() : prev();
+    }
+
+    // Momentum pan (single pointer at scale > 1).
+    if (hadCount === 1 && scale > 1 && velBuf.length >= 2) {
+      const old = velBuf[0];
+      const cur = velBuf[velBuf.length - 1];
+      const dt = cur.t - old.t;
+      if (dt > 0) {
+        const vx = (cur.x - old.x) / dt;  // screen px/ms
+        const vy = (cur.y - old.y) / dt;
+        const TIME_CONST = 300;            // ms — controls throw distance
+        tx += vx * TIME_CONST / scale;
+        ty += vy * TIME_CONST / scale;
+        clampTranslate();
+        lightboxImg.style.transition = 'transform 0.5s ease-out';
+        applyTransform();
+      }
+      velBuf = [];
     }
 
     // Transition 2→1 finger: reinit single-pointer state from remaining pointer.
