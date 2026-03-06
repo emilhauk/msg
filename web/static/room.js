@@ -540,6 +540,50 @@ function attachImageLoadSnap(container) {
     const list = document.getElementById('emoji-autocomplete');
     if (!ta || !list) return;
 
+    // Pre-load all emojis for fuzzy matching (groups 0–9 = all standard groups;
+    // group 9 = Flags, which includes country flags like :flag_no:).
+    let allEmojis = [];
+    Promise.all([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((g) => db.getEmojiByGroup(g)))
+      .then((groups) => {
+        allEmojis = groups.flat();
+      })
+      .catch(() => {});
+
+    // Returns a numeric score (lower = better) if pattern is a subsequence of
+    // str, or Infinity if not. Rewards early and consecutive matches.
+    function fuzzyScore(pattern, str) {
+      let pi = 0,
+        score = 0,
+        lastMatch = -1;
+      for (let si = 0; si < str.length && pi < pattern.length; si++) {
+        if (str[si] === pattern[pi]) {
+          score += lastMatch === si - 1 ? 0 : si + 1;
+          lastMatch = si;
+          pi++;
+        }
+      }
+      return pi === pattern.length ? score : Infinity;
+    }
+
+    function fuzzySearch(query) {
+      const q = query.toLowerCase();
+      const scored = [];
+      for (const emoji of allEmojis) {
+        // Search all shortcodes and the annotation; use the best (lowest) score.
+        // This handles emojis whose primary shortcode isn't descriptive (e.g. "+1"
+        // for 👍) — the annotation "thumbs up" or a secondary shortcode can still match.
+        const candidates = [...(emoji.shortcodes ?? []), emoji.annotation ?? ''].filter(Boolean);
+        let best = Infinity;
+        for (const c of candidates) {
+          const s = fuzzyScore(q, c.toLowerCase());
+          if (s < best) best = s;
+        }
+        if (best !== Infinity) scored.push({ emoji, score: best });
+      }
+      scored.sort((a, b) => a.score - b.score);
+      return scored.map((x) => x.emoji);
+    }
+
     let activeIdx = -1; // currently highlighted item index
     let matchStart = -1; // index of the leading ':' in textarea.value
     let matchEnd = -1; // index one past the last typed char
@@ -619,8 +663,13 @@ function attachImageLoadSnap(container) {
       matchStart = frag.start;
       matchEnd = frag.end;
 
-      db.getEmojiBySearchQuery(frag.query)
-        .then((results) => {
+      Promise.all([
+        db.getEmojiBySearchQuery(frag.query).catch(() => []),
+        Promise.resolve(fuzzySearch(frag.query)),
+      ]).then(([wordResults, fuzzyResults]) => {
+          const seen = new Set(wordResults.map((e) => e.unicode));
+          const results = [...wordResults, ...fuzzyResults.filter((e) => !seen.has(e.unicode))];
+
           // Re-check cursor hasn't moved since the async call.
           const current = getFragment();
           if (!current || current.query !== frag.query) return;
