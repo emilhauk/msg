@@ -1283,6 +1283,16 @@ emoji-picker {
   height: auto;
   border-radius: var(--radius-md);
   object-fit: contain;
+  touch-action: none;
+  cursor: zoom-in;
+}
+
+.lightbox__img--zoomed {
+  cursor: grab;
+}
+
+.lightbox__img--zoomed:active {
+  cursor: move;
 }
 
 .lightbox__close {
