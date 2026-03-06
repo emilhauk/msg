@@ -220,6 +220,47 @@ docker run -p 8080:8080 --env-file .env \
     └── static/              # CSS
 ```
 
+## Reverse proxy
+
+msg uses [Server-Sent Events](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events) for real-time delivery. SSE connections are long-lived and streaming, which requires specific reverse proxy configuration — the defaults are typically wrong.
+
+Without correct configuration you may see `ERR_HTTP2_PROTOCOL_ERROR` in the browser console and messages silently failing to appear (until the connection recovers on reconnect).
+
+### nginx
+
+The SSE endpoint (`/rooms/*/events`) needs its own `location` block with buffering disabled and an extended read timeout. The upstream connection must use HTTP/1.1 (nginx defaults to HTTP/1.0 for proxied requests, which does not support keep-alive streaming).
+
+```nginx
+server {
+  listen 443 ssl;
+  http2  on;
+  # ... ssl_certificate, server_name, etc.
+
+  # SSE endpoint — disable buffering, extend timeout, use HTTP/1.1 upstream
+  location ~ ^/rooms/[^/]+/events$ {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+
+    proxy_http_version 1.1;
+    proxy_set_header Connection '';
+
+    proxy_buffering off;
+    proxy_cache off;
+    proxy_read_timeout 3600s;
+    chunked_transfer_encoding on;
+  }
+
+  location / {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+  }
+}
+```
+
+For other reverse proxies (Caddy, Traefik, HAProxy, etc.) consult their documentation for SSE or long-lived streaming connections — the same principles apply: disable response buffering and set a long (or unlimited) upstream read timeout.
+
 ## Known limitations
 
 - **SSE reconnect recovery** — on reconnect, the client fetches the 50 newest messages
