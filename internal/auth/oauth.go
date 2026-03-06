@@ -48,6 +48,11 @@ type Handler struct {
 	GoogleClientSecret  string
 }
 
+// secure reports whether cookies should be restricted to HTTPS connections.
+func (h *Handler) secure() bool {
+	return strings.HasPrefix(h.BaseURL, "https://")
+}
+
 // checkAccess reports whether the given email is permitted to log in.
 // When OpenRegistration is true everyone is allowed; otherwise the email must
 // appear in AllowList (case-insensitive).
@@ -127,6 +132,7 @@ func (h *Handler) initOAuthState(w http.ResponseWriter, r *http.Request) (string
 		Value:    state,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   h.secure(),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   600, // 10 minutes
 	})
@@ -163,6 +169,7 @@ func (h *Handler) HandleCallback(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   h.secure(),
 		MaxAge:   -1,
 	})
 
@@ -216,7 +223,7 @@ func (h *Handler) HandleLogout(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		_ = h.Redis.DeleteSession(r.Context(), token)
 	}
-	ClearCookie(w)
+	ClearCookie(w, h.secure())
 	http.Redirect(w, r, "/login", http.StatusFound)
 }
 
@@ -266,7 +273,7 @@ func (h *Handler) createSession(ctx context.Context, w http.ResponseWriter, iden
 	if err := h.Redis.SetSession(ctx, token, *user); err != nil {
 		return err
 	}
-	SetCookie(w, signed)
+	SetCookie(w, signed, h.secure())
 	return nil
 }
 

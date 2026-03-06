@@ -46,25 +46,29 @@ func sign(secret []byte, token string) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-// SetCookie writes the signed session cookie.
-func SetCookie(w http.ResponseWriter, signed string) {
+// SetCookie writes the signed session cookie. Pass secure=true when the app is
+// served over HTTPS so that the browser only sends the cookie on TLS connections.
+func SetCookie(w http.ResponseWriter, signed string, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
 		Value:    signed,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   secure,
 		SameSite: http.SameSiteLaxMode,
 		Expires:  time.Now().Add(90 * 24 * time.Hour),
 	})
 }
 
-// ClearCookie removes the session cookie.
-func ClearCookie(w http.ResponseWriter) {
+// ClearCookie removes the session cookie. The secure parameter must match the
+// value used when the cookie was set so that browsers reliably delete it.
+func ClearCookie(w http.ResponseWriter, secure bool) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     cookieName,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   secure,
 		MaxAge:   -1,
 	})
 }
