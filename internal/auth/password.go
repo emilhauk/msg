@@ -14,8 +14,14 @@ import (
 type PasswordHandler struct {
 	Redis            *redisclient.Client
 	SessionSecret    []byte
+	BaseURL          string
 	OpenRegistration bool
 	AllowList        []string // lowercased, trimmed email addresses
+}
+
+// secure reports whether cookies should be restricted to HTTPS connections.
+func (h *PasswordHandler) secure() bool {
+	return strings.HasPrefix(h.BaseURL, "https://")
 }
 
 // checkAccess reports whether the given email is permitted to log in.
@@ -108,6 +114,6 @@ func (h *PasswordHandler) HandleLogin(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "internal error", http.StatusInternalServerError)
 		return
 	}
-	SetCookie(w, signed)
+	SetCookie(w, signed, h.secure())
 	http.Redirect(w, r, "/rooms/bemro", http.StatusFound)
 }

@@ -121,6 +121,7 @@ func main() {
 	passwordHandler := &auth.PasswordHandler{
 		Redis:            redis,
 		SessionSecret:    sessionSecret,
+		BaseURL:          baseURL,
 		OpenRegistration: openRegistration,
 		AllowList:        allowList,
 	}
