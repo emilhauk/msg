@@ -143,6 +143,7 @@ rooms:{id}:events                       Pub/Sub SSE fan-out channel
 messages:{msg-id}                       Hash    id, room_id, user_id, text, attachments (JSON), created_at (ms); TTL 30 days
 reactions:{msg-id}                      Hash    emoji → count; TTL 30 days
 reactions:{msg-id}:users                Hash    "{emoji}\x00{userID}" → "1"; TTL 30 days
+reactions:{msg-id}:order                ZSet    emoji members scored by unix-ms of first-use; TTL 30 days
 unfurls:{sha256-of-url}                 String  JSON Unfurl or "null"; TTL 24h (success) / 15 min (failure)
 users:{uuid}:rooms:{roomId}:last_active String  unix ms timestamp; TTL 30 days (reset on each write)
 users:{uuid}:rooms:{roomId}:viewing    String  "1"; TTL 90 s; reset by heartbeat every 60 s; cleared immediately by leave beacon

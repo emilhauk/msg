@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"sort"
 	"strconv"
 	"time"
 
@@ -394,6 +395,9 @@ func reactionCountsKey(msgID string) string { return "reactions:" + msgID }
 // reactionUsersKey returns the Redis hash key that stores "{emoji}\x00{userID}" → "1".
 func reactionUsersKey(msgID string) string { return "reactions:" + msgID + ":users" }
 
+// reactionOrderKey returns the Redis sorted set key that stores emoji members scored by unix-ms of first use.
+func reactionOrderKey(msgID string) string { return "reactions:" + msgID + ":order" }
+
 // ToggleReaction adds or removes a single emoji reaction by userID on msgID.
 // It returns the updated reaction counts as a map[emoji]count.
 func (c *Client) ToggleReaction(ctx context.Context, msgID, emoji, userID string) (map[string]int, error) {
@@ -407,6 +411,7 @@ func (c *Client) ToggleReaction(ctx context.Context, msgID, emoji, userID string
 		return nil, fmt.Errorf("redis: check reaction: %w", err)
 	}
 
+	orderKey := reactionOrderKey(msgID)
 	pipe := c.rdb.Pipeline()
 	if exists {
 		// Remove the reaction.
@@ -416,6 +421,9 @@ func (c *Client) ToggleReaction(ctx context.Context, msgID, emoji, userID string
 		// Add the reaction.
 		pipe.HSet(ctx, usersKey, field, 1)
 		pipe.HIncrBy(ctx, countsKey, emoji, 1)
+		// Record first-use timestamp; NX = only set if not already present.
+		pipe.ZAddNX(ctx, orderKey, goredis.Z{Score: float64(time.Now().UnixMilli()), Member: emoji})
+		pipe.Expire(ctx, orderKey, messageTTL)
 	}
 	// Refresh TTLs on both keys to match messageTTL.
 	pipe.Expire(ctx, countsKey, messageTTL)
@@ -431,6 +439,7 @@ func (c *Client) ToggleReaction(ctx context.Context, msgID, emoji, userID string
 		if err == nil && count <= 0 {
 			pipe2 := c.rdb.Pipeline()
 			pipe2.HDel(ctx, countsKey, emoji)
+			pipe2.ZRem(ctx, orderKey, emoji)
 			_, _ = pipe2.Exec(ctx)
 		}
 	}
@@ -522,17 +531,26 @@ func (c *Client) GetReactions(ctx context.Context, msgID, userID string) ([]mode
 			})
 		}
 	}
-	// Stable sort: by count descending, then emoji string ascending.
-	for i := 1; i < len(reactions); i++ {
-		for j := i; j > 0; j-- {
-			a, b := reactions[j-1], reactions[j]
-			if a.Count < b.Count || (a.Count == b.Count && a.Emoji > b.Emoji) {
-				reactions[j-1], reactions[j] = reactions[j], reactions[j-1]
-			} else {
-				break
-			}
-		}
+	// Sort by first-use timestamp (insertion order) from the order sorted set.
+	ordered, _ := c.rdb.ZRange(ctx, reactionOrderKey(msgID), 0, -1).Result()
+	pos := make(map[string]int, len(ordered))
+	for i, e := range ordered {
+		pos[e] = i
 	}
+	sort.SliceStable(reactions, func(i, j int) bool {
+		pi, iKnown := pos[reactions[i].Emoji]
+		pj, jKnown := pos[reactions[j].Emoji]
+		if iKnown && jKnown {
+			return pi < pj
+		}
+		if iKnown {
+			return true
+		}
+		if jKnown {
+			return false
+		}
+		return reactions[i].Emoji < reactions[j].Emoji // fallback for old data
+	})
 	return reactions, nil
 }
 

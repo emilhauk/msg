@@ -329,3 +329,69 @@ func TestReactionToggle_ReactedByMe(t *testing.T) {
 	require.Len(t, reactions2, 1)
 	assert.False(t, reactions2[0].ReactedByMe, "user2 should see ReactedByMe=false")
 }
+
+func TestReactionOrdering(t *testing.T) {
+	rc, _ := newClient(t)
+	ctx := context.Background()
+
+	ms := time.Now().UnixMilli()
+	msg := model.Message{
+		ID:          fmt.Sprintf("%d-order", ms),
+		RoomID:      "rm",
+		UserID:      "u",
+		Text:        "order test",
+		CreatedAt:   time.UnixMilli(ms),
+		CreatedAtMS: fmt.Sprintf("%d", ms),
+	}
+	require.NoError(t, rc.SaveMessage(ctx, msg))
+
+	// User1 adds A, B, C in order. Sleep 1ms between each to guarantee distinct timestamps.
+	_, err := rc.ToggleReaction(ctx, msg.ID, "👍", "user1")
+	require.NoError(t, err)
+	time.Sleep(time.Millisecond)
+	_, err = rc.ToggleReaction(ctx, msg.ID, "❤️", "user1")
+	require.NoError(t, err)
+	time.Sleep(time.Millisecond)
+	_, err = rc.ToggleReaction(ctx, msg.ID, "🎉", "user1")
+	require.NoError(t, err)
+
+	// User2 also reacts with C (giving it the highest count) and adds D.
+	_, err = rc.ToggleReaction(ctx, msg.ID, "🎉", "user2")
+	require.NoError(t, err)
+	time.Sleep(time.Millisecond)
+	_, err = rc.ToggleReaction(ctx, msg.ID, "🚀", "user2")
+	require.NoError(t, err)
+
+	reactions, err := rc.GetReactions(ctx, msg.ID, "")
+	require.NoError(t, err)
+	require.Len(t, reactions, 4)
+
+	emojis := make([]string, len(reactions))
+	for i, r := range reactions {
+		emojis[i] = r.Emoji
+	}
+	assert.Equal(t, []string{"👍", "❤️", "🎉", "🚀"}, emojis, "reactions should be in first-use order, not count order")
+
+	t.Run("re-add after full removal gets fresh timestamp", func(t *testing.T) {
+		// Remove all of 🎉 (user1 and user2 both un-react).
+		_, err = rc.ToggleReaction(ctx, msg.ID, "🎉", "user1")
+		require.NoError(t, err)
+		_, err = rc.ToggleReaction(ctx, msg.ID, "🎉", "user2")
+		require.NoError(t, err)
+
+		// Re-add 🎉 — should now appear last (after 🚀); sleep to get a timestamp after 🚀.
+		time.Sleep(time.Millisecond)
+		_, err = rc.ToggleReaction(ctx, msg.ID, "🎉", "user1")
+		require.NoError(t, err)
+
+		reactions2, err := rc.GetReactions(ctx, msg.ID, "")
+		require.NoError(t, err)
+		require.Len(t, reactions2, 4)
+
+		emojis2 := make([]string, len(reactions2))
+		for i, r := range reactions2 {
+			emojis2[i] = r.Emoji
+		}
+		assert.Equal(t, []string{"👍", "❤️", "🚀", "🎉"}, emojis2, "re-added emoji should appear after 🚀")
+	})
+}
