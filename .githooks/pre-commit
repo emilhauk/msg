@@ -1,0 +1,4 @@
+#!/bin/sh
+set -e
+echo "Running make test before commit..." >&2
+make test

@@ -1,4 +1,4 @@
-.PHONY: test test-go test-e2e lint
+.PHONY: test test-go test-e2e lint install-hooks
 
 # Run all tests: lint, fast Go unit tests, and browser E2E tests.
 test: lint test-go test-e2e
@@ -16,3 +16,7 @@ test-e2e:
 # JS lint via Biome.
 lint:
 	npm run lint
+
+# Activate git hooks stored in .githooks/
+install-hooks:
+	git config core.hooksPath .githooks
