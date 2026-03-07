@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"embed"
 	"encoding/hex"
+	"fmt"
 	"io/fs"
 	"net/http"
 	"os"
@@ -43,16 +45,15 @@ func main() {
 	zerolog.SetGlobalLevel(logLevel)
 
 	redisURL := envOrDefault("REDIS_URL", "redis://localhost:6379")
-	sessionSecretHex := envOrDefault("SESSION_SECRET", "0000000000000000000000000000000000000000000000000000000000000000")
 	baseURL := envOrDefault("BASE_URL", "http://localhost:8080")
 	port := envOrDefault("PORT", "8080")
 	openRegistration := strings.EqualFold(envOrDefault("OPEN_REGISTRATION", "false"), "true")
 	allowList := parseAllowList(envOrDefault("ALLOW_LIST", ""))
 	enablePasswordLogin := strings.EqualFold(envOrDefault("ENABLE_PASSWORD_LOGIN", "false"), "true")
 
-	sessionSecret, err := hex.DecodeString(sessionSecretHex)
-	if err != nil || len(sessionSecret) == 0 {
-		log.Fatal().Msg("invalid SESSION_SECRET: must be a hex string")
+	sessionSecret, err := resolveSessionSecret()
+	if err != nil {
+		log.Fatal().Err(err).Msg("resolve session secret")
 	}
 
 	redis, err := redisclient.New(redisURL)
@@ -282,6 +283,27 @@ func envOrDefault(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// resolveSessionSecret reads SESSION_SECRET from the environment and decodes it
+// as a hex string. If the variable is not set, a random 32-byte secret is
+// generated and an error is logged to warn that all sessions will be
+// invalidated on the next restart.
+func resolveSessionSecret() ([]byte, error) {
+	raw := os.Getenv("SESSION_SECRET")
+	if raw == "" {
+		secret := make([]byte, 32)
+		if _, err := rand.Read(secret); err != nil {
+			return nil, err
+		}
+		log.Error().Msg("SESSION_SECRET is not set — using a random secret; all sessions will be invalidated on restart")
+		return secret, nil
+	}
+	secret, err := hex.DecodeString(raw)
+	if err != nil || len(secret) == 0 {
+		return nil, fmt.Errorf("SESSION_SECRET must be a non-empty hex string")
+	}
+	return secret, nil
 }
 
 // parseAllowList splits a comma-separated list of emails, lowercases and trims
