@@ -33,19 +33,40 @@
       <input
         type="text"
         id="panel-invite-input"
-        name="user_id"
+        name="user_name"
         class="room-panel__invite-input"
         placeholder="@name…"
         autocomplete="off"
         list="panel-invite-candidates"
         required>
+      <input type="hidden" name="user_id" id="panel-invite-user-id">
       <datalist id="panel-invite-candidates">
         {{range .Candidates}}
-        <option value="{{.ID}}" label="{{.Name}}">{{.Name}}</option>
+        <option value="{{.Name}}" data-id="{{.ID}}">
         {{end}}
       </datalist>
       <button class="btn btn--primary btn--sm" type="submit">Add</button>
     </form>
+    <script>
+      (function() {
+        var input = document.getElementById('panel-invite-input');
+        input.addEventListener('input', function() {
+          if (this.value.startsWith('@')) {
+            this.value = this.value.slice(1);
+          }
+        });
+        document.querySelector('.room-panel__add-form').addEventListener('submit', function() {
+          var val = input.value;
+          var opts = document.querySelectorAll('#panel-invite-candidates option');
+          for (var i = 0; i < opts.length; i++) {
+            if (opts[i].value === val) {
+              document.getElementById('panel-invite-user-id').value = opts[i].dataset.id;
+              return;
+            }
+          }
+        });
+      })();
+    </script>
     {{if not .Candidates}}
     <p class="room-panel__hint">Invite candidates appear once you share other rooms with people.</p>
     {{end}}

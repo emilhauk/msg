@@ -96,6 +96,59 @@ func TestRoomPanelMembersAndPresence(t *testing.T) {
 		"active dot should appear for recently active member")
 }
 
+// TestAddMemberAtMention verifies that typing "@Name" in the invite input strips
+// the leading "@" so the datalist can match by name, and that submitting the form
+// successfully adds the member via the hidden user_id field.
+func TestAddMemberAtMention(t *testing.T) {
+	t.Parallel()
+
+	// Two rooms: shared (both alice and bob) and target (alice only).
+	// Bob becomes a candidate for target because they share "shared".
+	sharedRoom := panelRoom + "-shared"
+	targetRoom := panelRoom + "-at-mention"
+
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: sharedRoom, Name: "Shared Room"})
+	ts.SeedRoom(t, model.Room{ID: targetRoom, Name: "Target Room"})
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), alice))
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), bob))
+	ts.GrantAccess(t, sharedRoom, alice.ID)
+	ts.GrantAccess(t, sharedRoom, bob.ID)
+	ts.GrantAccess(t, targetRoom, alice.ID)
+
+	b := newBrowser(t)
+	page := authPage(t, b, ts, alice, targetRoom)
+
+	// Open the panel and wait for content.
+	page.MustElement("#room-panel-toggle").MustClick()
+	page.MustElement("#room-panel .room-panel__inner")
+
+	// Type "@Bob" — the input listener should strip the leading "@".
+	inviteInput := page.MustElement("#panel-invite-input")
+	inviteInput.MustInput("@Bob")
+
+	// The visible input value should be "Bob" (@ was stripped).
+	val := page.MustEval(`() => document.getElementById('panel-invite-input').value`).String()
+	assert.Equal(t, "Bob", val, "@ prefix should be stripped from the invite input")
+
+	// Simulate datalist selection by setting the hidden user_id (mirrors what the
+	// submit handler does when a matching option is found in the datalist).
+	page.MustEval(`() => document.getElementById('panel-invite-user-id').value = '` + bob.ID + `'`)
+
+	// Submit the form and wait for the panel to refresh.
+	page.MustElement(".room-panel__add-form button[type=submit]").MustClick()
+	time.Sleep(300 * time.Millisecond)
+
+	// Bob should now appear in the members list.
+	panelHTML := page.MustElement("#room-panel").MustHTML()
+	assert.Contains(t, panelHTML, "Bob", "Bob should appear as a member after being added")
+
+	// Verify server-side: bob should have access to targetRoom.
+	ok, err := ts.Redis.IsRoomAccessible(context.Background(), targetRoom, bob.ID)
+	require.NoError(t, err)
+	assert.True(t, ok, "bob should have access to the target room after being added")
+}
+
 // TestNewRoomModal verifies that the new-room button opens the creation dialog,
 // that the cancel button closes it, and that submitting the form navigates to
 // the newly-created room with the correct title.
