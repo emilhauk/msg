@@ -161,6 +161,9 @@
     {{/* @mention autocomplete dropdown */}}
     <ul id="mention-autocomplete" class="emoji-autocomplete mention-autocomplete" role="listbox" aria-label="Mention suggestions" hidden></ul>
 
+    {{/* Slash command autocomplete dropdown — only shown for the message form textarea */}}
+    <ul id="command-autocomplete" class="emoji-autocomplete command-autocomplete" role="listbox" aria-label="Commands" hidden></ul>
+
     {{/* Drag-and-drop overlay — shown while a file drag is over the room column */}}
     <div id="drop-overlay" class="drop-overlay" aria-hidden="true" hidden>
       <span class="drop-overlay__label">Drop files here</span>
@@ -207,6 +210,15 @@
 
 
 </div>
+
+<dialog id="leave-room-dialog" class="leave-room-dialog">
+  <h2 class="leave-room-dialog__title">Leave room?</h2>
+  <p class="leave-room-dialog__body">You will need to be re-invited to join again.</p>
+  <div class="leave-room-dialog__actions">
+    <button class="btn btn--sm" id="leave-room-cancel" type="button">Cancel</button>
+    <button class="btn btn--sm leave-room-dialog__confirm" id="leave-room-confirm" type="button">Leave</button>
+  </div>
+</dialog>
 
 <dialog id="new-room-dialog" class="new-room-dialog">
   <h2 class="new-room-dialog__title">New room</h2>
@@ -297,6 +309,85 @@
         closeNewRoomDialog();
       });
     }
+  }());
+
+  // ---- Leave room ----
+  (function () {
+    var dialog = document.getElementById('leave-room-dialog');
+    var confirmBtn = document.getElementById('leave-room-confirm');
+    var cancelBtn = document.getElementById('leave-room-cancel');
+    var pendingRoomID = null;
+
+    function doLeave(rID) {
+      fetch('/rooms/' + rID + '/leave', {
+        method: 'DELETE',
+        credentials: 'include',
+      }).then(function (resp) {
+        window.location.href = resp.redirected ? resp.url : '/';
+      }).catch(function () {
+        window.location.href = '/';
+      });
+    }
+
+    function showLeaveDialog(rID) {
+      pendingRoomID = rID;
+      dialog.showModal();
+    }
+
+    // Fetches the access member list for rID and decides whether to skip the
+    // confirmation dialog (last member) or show it (multiple members).
+    // Both the panel button and the /leave command use this same function.
+    function triggerLeaveRoom(rID) {
+      fetch('/rooms/' + rID + '/members', { credentials: 'include' })
+        .then(function (resp) { return resp.json(); })
+        .then(function (members) {
+          if (!members || members.length <= 1) {
+            doLeave(rID);
+          } else {
+            showLeaveDialog(rID);
+          }
+        })
+        .catch(function () {
+          showLeaveDialog(rID); // safe fallback on fetch error
+        });
+    }
+
+    // Delegated click for "Leave room" panel button (panel is lazy-loaded).
+    document.body.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-leave-room]');
+      if (!btn) return;
+      triggerLeaveRoom(btn.dataset.leaveRoom);
+    });
+
+    confirmBtn.addEventListener('click', function () {
+      var rID = pendingRoomID;
+      dialog.close();
+      pendingRoomID = null;
+      if (rID) doLeave(rID);
+    });
+
+    cancelBtn.addEventListener('click', function () {
+      dialog.close();
+      pendingRoomID = null;
+    });
+
+    dialog.addEventListener('click', function (e) {
+      if (e.target === dialog) {
+        dialog.close();
+        pendingRoomID = null;
+      }
+    });
+
+    dialog.addEventListener('cancel', function (e) {
+      e.preventDefault();
+      dialog.close();
+      pendingRoomID = null;
+    });
+
+    // Expose leave action for the slash-command autocomplete.
+    window.__commandActions = {
+      leave: function () { triggerLeaveRoom(window.roomID); },
+    };
   }());
 
   // ---- Left sidebar toggle (mobile) ----

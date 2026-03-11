@@ -588,6 +588,43 @@ img { display: block; max-width: 100%; }
   margin-top: .75rem;
 }
 
+/* ---- Leave-room dialog ---- */
+.leave-room-dialog {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: 1.5rem;
+  width: min(360px, calc(100vw - 2rem));
+  box-shadow: 0 8px 32px rgba(0,0,0,.18);
+  background: var(--color-bg);
+  color: var(--color-text);
+  position: fixed;
+  top: 15vh;
+  left: 50%;
+  transform: translateX(-50%);
+  margin: 0;
+  animation: new-room-in 180ms ease both;
+}
+.leave-room-dialog::backdrop { background: rgba(0,0,0,.45); }
+.leave-room-dialog__title { font-size: 1rem; font-weight: 600; margin: 0 0 .5rem; }
+.leave-room-dialog__body { font-size: .9375rem; margin: 0 0 1.25rem; color: var(--color-text-muted); }
+.leave-room-dialog__actions { display: flex; gap: .5rem; justify-content: flex-end; }
+.leave-room-dialog__confirm { color: var(--color-danger); border-color: color-mix(in srgb, var(--color-danger) 35%, transparent); }
+.leave-room-dialog__confirm:hover { background: color-mix(in srgb, var(--color-danger) 10%, transparent); border-color: var(--color-danger); }
+
+/* Leave-room panel button */
+.room-panel__section--leave { border-top: 1px solid var(--color-border); padding-top: .75rem; margin-top: .25rem; }
+.leave-room-btn { color: var(--color-danger); border-color: color-mix(in srgb, var(--color-danger) 30%, transparent); }
+.leave-room-btn:hover { background: color-mix(in srgb, var(--color-danger) 10%, transparent); border-color: var(--color-danger); }
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="auto"] .leave-room-btn { background: color-mix(in srgb, var(--color-danger) 10%, transparent); border-color: var(--color-danger); }
+  :root[data-theme="auto"] .leave-room-btn:hover { background: transparent; border-color: color-mix(in srgb, var(--color-danger) 30%, transparent); }
+}
+:root[data-theme="dark"] .leave-room-btn { background: color-mix(in srgb, var(--color-danger) 10%, transparent); border-color: var(--color-danger); }
+:root[data-theme="dark"] .leave-room-btn:hover { background: transparent; border-color: color-mix(in srgb, var(--color-danger) 30%, transparent); }
+
+/* Command autocomplete description text */
+.command-autocomplete__desc { margin-left: auto; color: var(--color-text-muted); font-size: .8125rem; }
+
 /* ---- Main area ---- */
 .room-main {
   flex: 1;

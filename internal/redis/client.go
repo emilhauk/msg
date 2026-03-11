@@ -337,6 +337,16 @@ func (c *Client) AddRoomAccess(ctx context.Context, roomID, userID string) error
 	return c.rdb.SAdd(ctx, "rooms:"+roomID+":access", userID).Err()
 }
 
+// RemoveRoomAccess revokes userID's access to roomID.
+func (c *Client) RemoveRoomAccess(ctx context.Context, roomID, userID string) error {
+	return c.rdb.SRem(ctx, "rooms:"+roomID+":access", userID).Err()
+}
+
+// GetRoomAccessCount returns the number of users with access to the room.
+func (c *Client) GetRoomAccessCount(ctx context.Context, roomID string) (int64, error) {
+	return c.rdb.SCard(ctx, "rooms:"+roomID+":access").Result()
+}
+
 // GetRoomAccessList returns all user IDs with access to the room.
 func (c *Client) GetRoomAccessList(ctx context.Context, roomID string) ([]string, error) {
 	return c.rdb.SMembers(ctx, "rooms:"+roomID+":access").Result()
@@ -613,6 +623,29 @@ func (c *Client) DeleteMessage(ctx context.Context, roomID, msgID string) error 
 	pipe.Del(ctx, "reactions:"+msgID)
 	pipe.Del(ctx, "reactions:"+msgID+":users")
 	_, err := pipe.Exec(ctx)
+	return err
+}
+
+// DeleteRoom removes a room and all its messages from Redis. Call this only
+// after verifying that no users remain (or when the last member is leaving).
+func (c *Client) DeleteRoom(ctx context.Context, roomID string) error {
+	msgIDs, err := c.rdb.ZRange(ctx, "rooms:"+roomID+":messages", 0, -1).Result()
+	if err != nil {
+		return fmt.Errorf("redis: delete room: list messages: %w", err)
+	}
+	pipe := c.rdb.Pipeline()
+	for _, msgID := range msgIDs {
+		pipe.Del(ctx, "messages:"+msgID)
+		pipe.Del(ctx, "reactions:"+msgID)
+		pipe.Del(ctx, "reactions:"+msgID+":users")
+		pipe.Del(ctx, "reactions:"+msgID+":order")
+	}
+	pipe.Del(ctx, "rooms:"+roomID+":messages")
+	pipe.Del(ctx, "rooms:"+roomID+":members")
+	pipe.Del(ctx, "rooms:"+roomID+":access")
+	pipe.Del(ctx, "rooms:"+roomID)
+	pipe.ZRem(ctx, "rooms", roomID)
+	_, err = pipe.Exec(ctx)
 	return err
 }
 

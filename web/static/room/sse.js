@@ -102,6 +102,10 @@ function attachEsListeners(target) {
     if (hint) hint.hidden = false;
   });
 
+  target.addEventListener('redirect', (e) => {
+    window.location.href = e.data.trim();
+  });
+
   target.addEventListener('delete', (e) => {
     const el = document.getElementById(`msg-${e.data.trim()}`);
     if (el) el.remove();

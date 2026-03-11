@@ -267,6 +267,46 @@ func (h *RoomsHandler) HandleCreateInvite(w http.ResponseWriter, r *http.Request
 	http.Redirect(w, r, "/rooms/"+roomID+"/panel?invite_url="+token, http.StatusSeeOther)
 }
 
+// HandleLeave handles DELETE /rooms/{id}/leave — the current user leaves the room.
+// If the user is the last member the room and all its messages are deleted.
+func (h *RoomsHandler) HandleLeave(w http.ResponseWriter, r *http.Request) {
+	roomID := r.PathValue("id")
+	user := middleware.UserFromContext(r.Context())
+
+	room, err := h.Redis.GetRoom(r.Context(), roomID)
+	if err != nil || room == nil {
+		http.Error(w, "room not found", http.StatusNotFound)
+		return
+	}
+	ok, err := h.Redis.IsRoomAccessible(r.Context(), roomID, user.ID)
+	if err != nil || !ok {
+		http.Error(w, "forbidden", http.StatusForbidden)
+		return
+	}
+
+	count, err := h.Redis.GetRoomAccessCount(r.Context(), roomID)
+	if err != nil {
+		http.Error(w, "failed to check members", http.StatusInternalServerError)
+		return
+	}
+
+	if count <= 1 {
+		// Last member: notify any remaining open SSE connections, then delete.
+		_ = h.Redis.Publish(r.Context(), roomID, "redirect:/")
+		if err := h.Redis.DeleteRoom(r.Context(), roomID); err != nil {
+			http.Error(w, "failed to delete room", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		if err := h.Redis.RemoveRoomAccess(r.Context(), roomID, user.ID); err != nil {
+			http.Error(w, "failed to leave room", http.StatusInternalServerError)
+			return
+		}
+	}
+
+	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
 // HandleJoin handles GET /join/{token} — accepts an invite link. The user must
 // already be authenticated.
 func (h *RoomsHandler) HandleJoin(w http.ResponseWriter, r *http.Request) {

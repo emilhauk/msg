@@ -99,5 +99,13 @@
   </section>
   {{end}}
 
+  {{/* ---- Leave room ---- */}}
+  <section class="room-panel__section room-panel__section--leave">
+    <button type="button" class="btn btn--sm leave-room-btn"
+            data-leave-room="{{.Room.ID}}">
+      Leave room
+    </button>
+  </section>
+
 </div>
 {{end}}

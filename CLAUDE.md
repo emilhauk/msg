@@ -107,6 +107,7 @@ PATCH   /rooms/{id}/messages/{msgID}       — edit own message → 204 + SSE ed
 DELETE  /rooms/{id}/messages/{msgID}       — delete own message → 204 + SSE delete event
 POST /rooms/{id}/messages/{msgID}/reactions — toggle emoji reaction → 204 + SSE reaction event
 GET  /rooms/{id}/members                   — room member list for @mention autocomplete
+DELETE /rooms/{id}/leave                   — leave room; if last member, deletes room + all messages → redirect /
 POST /rooms/{id}/active                    — record user as actively viewing room (updates last_active + viewing key)
 POST /rooms/{id}/inactive                  — clear viewing key immediately (called via sendBeacon on hide)
 GET  /rooms/{id}/upload-url?hash=&content_type=&content_length=  — presign S3 PUT (optional)

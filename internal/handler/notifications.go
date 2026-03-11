@@ -198,7 +198,7 @@ func (h *NotificationsHandler) HandleRoomMembers(w http.ResponseWriter, r *http.
 		return
 	}
 
-	memberIDs, err := h.Redis.GetRoomMembers(r.Context(), roomID)
+	memberIDs, err := h.Redis.GetRoomAccessList(r.Context(), roomID)
 	if err != nil {
 		http.Error(w, "failed to get members", http.StatusInternalServerError)
 		return

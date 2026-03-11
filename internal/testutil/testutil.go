@@ -169,6 +169,7 @@ func buildMux(rc *redisclient.Client, renderer *tmpl.Renderer, webFS fs.FS, secr
 	mux.Handle("POST /rooms/{id}/access", authMW(http.HandlerFunc(roomsHandler.HandleAddAccess)))
 	mux.Handle("POST /rooms/{id}/invites", authMW(http.HandlerFunc(roomsHandler.HandleCreateInvite)))
 	mux.Handle("GET /join/{token}", authMW(http.HandlerFunc(roomsHandler.HandleJoin)))
+	mux.Handle("DELETE /rooms/{id}/leave", authMW(http.HandlerFunc(roomsHandler.HandleLeave)))
 	mux.Handle("POST /rooms/{id}/messages", authMW(http.HandlerFunc(messagesHandler.HandlePost)))
 	mux.Handle("GET /rooms/{id}/messages", authMW(http.HandlerFunc(messagesHandler.HandleHistory)))
 	mux.Handle("GET /rooms/{id}/events", authMW(http.HandlerFunc(sseHandler.HandleSSE)))

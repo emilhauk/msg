@@ -358,3 +358,169 @@ function createDropdown(listEl) {
   // Refresh member list when a new message is received (someone new may have joined).
   document.body.addEventListener('htmx:sseMessage', loadMembers);
 })();
+
+// ---- Slash command autocomplete ----
+// Triggered when the message-form textarea starts with "/".
+// Tab and click insert the command text (e.g. "/leave") into the textarea.
+// The command is executed when the message is sent (Enter or send button).
+// ArrowDown + Enter executes immediately without going through the form.
+(function initCommandAutocomplete() {
+  const listEl = document.getElementById('command-autocomplete');
+  if (!listEl) return;
+
+  const dd = createDropdown(listEl);
+  let activeTextarea = null;
+  let skipNextInput = false;
+
+  // Only applies to the main message form, not edit textareas.
+  function isCmdTextarea(el) {
+    return el instanceof HTMLTextAreaElement && el.classList.contains('message-form__textarea');
+  }
+
+  const COMMANDS = [
+    { id: 'leave', label: 'leave', description: 'Leave this room' },
+  ];
+
+  function getFragment(ta) {
+    const text = ta.value;
+    if (!text.startsWith('/')) return null;
+    return { query: text.slice(1).toLowerCase() };
+  }
+
+  // Inserts the full command text into the textarea without executing it.
+  // The command runs when the user sends the message.
+  function insertCommand(label) {
+    if (activeTextarea) {
+      skipNextInput = true;
+      activeTextarea.value = `/${label}`;
+      activeTextarea.focus();
+    }
+    dd.hide();
+  }
+
+  // Executes a command immediately (used for ArrowDown + Enter).
+  function executeCommand(cmdId) {
+    if (activeTextarea) {
+      activeTextarea.value = '';
+      activeTextarea.dispatchEvent(new Event('input'));
+      activeTextarea.focus();
+    }
+    dd.hide();
+    window.__commandActions?.[cmdId]?.();
+  }
+
+  function renderList(results, ta) {
+    listEl.innerHTML = results
+      .map((cmd, idx) =>
+        '<li class="emoji-autocomplete__item"' +
+        ' role="option" aria-selected="false"' +
+        ' data-id="' + cmd.id + '"' +
+        ' data-idx="' + idx + '">' +
+        '<span class="emoji-autocomplete__name">/' + cmd.label + '</span>' +
+        '<span class="command-autocomplete__desc">' + cmd.description + '</span>' +
+        '</li>',
+      )
+      .join('');
+
+    dd.position(ta);
+    listEl.hidden = false;
+    dd.highlight(-1);
+
+    listEl.querySelectorAll('.emoji-autocomplete__item').forEach((el) => {
+      el.addEventListener('mousedown', (e) => {
+        e.preventDefault();
+        insertCommand(el.dataset.id);
+      });
+      el.addEventListener('mouseover', () => {
+        dd.highlight(parseInt(el.dataset.idx, 10));
+      });
+    });
+  }
+
+  document.addEventListener('input', (e) => {
+    const ta = e.target;
+    if (!isCmdTextarea(ta)) return;
+    if (skipNextInput) { skipNextInput = false; return; }
+    activeTextarea = ta;
+
+    const frag = getFragment(ta);
+    if (!frag) { dd.hide(); return; }
+
+    const q = frag.query;
+    const results = q === ''
+      ? COMMANDS
+      : COMMANDS.filter((c) => c.label.startsWith(q));
+
+    if (results.length === 0) { dd.hide(); return; }
+    renderList(results, ta);
+  });
+
+  // Capture-phase keydown so we can stop propagation before the textarea's
+  // inline onkeydown fires — this prevents form submit when a command is selected.
+  document.addEventListener('keydown', (e) => {
+    if (listEl.hidden) return;
+    if (!isCmdTextarea(e.target)) return;
+
+    const items = dd.getItems();
+    const count = items.length;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      e.stopPropagation();
+      dd.highlight((dd.activeIdx + 1) % count);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      e.stopPropagation();
+      dd.highlight((dd.activeIdx - 1 + count) % count);
+    } else if (e.key === 'Tab') {
+      const target = dd.activeIdx >= 0 ? items[dd.activeIdx] : items[0];
+      if (target) {
+        e.preventDefault();
+        e.stopPropagation();
+        insertCommand(target.dataset.id);
+      }
+    } else if (e.key === 'Enter') {
+      if (dd.activeIdx >= 0) {
+        // Item highlighted: execute command immediately, block form submit.
+        e.preventDefault();
+        e.stopPropagation();
+        executeCommand(items[dd.activeIdx].dataset.id);
+      } else {
+        // Nothing highlighted: close dropdown, let the message send as plain text.
+        dd.hide();
+      }
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      e.stopPropagation();
+      dd.hide();
+    }
+  }, true); // capture: true — fires before textarea's inline onkeydown
+
+  // Intercept form submit: if the textarea contains an exact command, execute it
+  // instead of sending as a message. Handles both Enter and the send button.
+  const form = document.querySelector('.message-form');
+  if (form) {
+    form.addEventListener('htmx:beforeRequest', (e) => {
+      const ta = form.querySelector('.message-form__textarea');
+      const val = ta?.value.trim() ?? '';
+      if (!val.startsWith('/')) return;
+      const cmdId = val.slice(1).toLowerCase();
+      if (!COMMANDS.find((c) => c.id === cmdId)) return;
+      e.preventDefault();
+      ta.value = '';
+      ta.dispatchEvent(new Event('input'));
+      ta.focus();
+      window.__commandActions?.[cmdId]?.();
+    });
+  }
+
+  document.addEventListener('click', (e) => {
+    if (!listEl.hidden && !listEl.contains(e.target) && !isCmdTextarea(e.target)) dd.hide();
+  });
+
+  document.addEventListener('focusout', (e) => {
+    if (!isCmdTextarea(e.target)) return;
+    if (isCmdTextarea(e.relatedTarget)) return;
+    setTimeout(() => { if (!listEl.hidden) dd.hide(); }, 150);
+  });
+})();

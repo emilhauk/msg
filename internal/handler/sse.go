@@ -111,6 +111,10 @@ func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 				// The client splits on the first \n (which SSE joins from multiple data: fields).
 				fmt.Fprintf(w, "event: edit\ndata: %s\ndata: %s\n\n", msgID, escapeSSE(html))
 				flusher.Flush()
+			case strings.HasPrefix(payload, "redirect:"):
+				url := strings.TrimPrefix(payload, "redirect:")
+				fmt.Fprintf(w, "event: redirect\ndata: %s\n\n", url)
+				flusher.Flush()
 			}
 		}
 	}

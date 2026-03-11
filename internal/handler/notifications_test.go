@@ -246,6 +246,7 @@ func TestHandleRoomMembers(t *testing.T) {
 	ts.GrantAccess(t, testRoom, alice.ID)
 	require.NoError(t, ts.Redis.CreateUser(context.Background(), alice))
 	require.NoError(t, ts.Redis.CreateUser(context.Background(), bob))
+	ts.GrantAccess(t, testRoom, bob.ID)
 
 	// Touch room members so they appear in the members list.
 	require.NoError(t, ts.Redis.TouchRoomMember(context.Background(), testRoom, alice.ID))
