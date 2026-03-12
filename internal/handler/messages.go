@@ -159,7 +159,7 @@ func (h *MessagesHandler) sendPushNotifications(msg model.Message, mentionedName
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	members, err := h.Redis.GetRoomMembers(ctx, msg.RoomID)
+	members, err := h.Redis.GetRoomAccessList(ctx, msg.RoomID)
 	if err != nil {
 		log.Ctx(ctx).Error().Err(err).Msg("webpush: get room members")
 		return

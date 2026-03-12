@@ -351,6 +351,7 @@ func TestHandlePost_PushDelivery(t *testing.T) {
 	ts.SeedRoom(t, model.Room{ID: testRoom, Name: "Test Room"})
 	ts.GrantAccess(t, testRoom, alice.ID)
 	require.NoError(t, ts.Redis.CreateUser(context.Background(), bob))
+	ts.GrantAccess(t, testRoom, bob.ID)
 	require.NoError(t, ts.Redis.TouchRoomMember(context.Background(), testRoom, alice.ID))
 	require.NoError(t, ts.Redis.TouchRoomMember(context.Background(), testRoom, bob.ID))
 
@@ -411,6 +412,7 @@ func TestHandlePost_PushMutedRecipient(t *testing.T) {
 	ts.SeedRoom(t, model.Room{ID: testRoom, Name: "Test Room"})
 	ts.GrantAccess(t, testRoom, alice.ID)
 	require.NoError(t, ts.Redis.CreateUser(context.Background(), bob))
+	ts.GrantAccess(t, testRoom, bob.ID)
 	require.NoError(t, ts.Redis.TouchRoomMember(context.Background(), testRoom, alice.ID))
 	require.NoError(t, ts.Redis.TouchRoomMember(context.Background(), testRoom, bob.ID))
 
@@ -442,6 +444,7 @@ func TestHandlePost_PushExpiredSubscription(t *testing.T) {
 	ts.SeedRoom(t, model.Room{ID: testRoom, Name: "Test Room"})
 	ts.GrantAccess(t, testRoom, alice.ID)
 	require.NoError(t, ts.Redis.CreateUser(context.Background(), bob))
+	ts.GrantAccess(t, testRoom, bob.ID)
 	require.NoError(t, ts.Redis.TouchRoomMember(context.Background(), testRoom, alice.ID))
 	require.NoError(t, ts.Redis.TouchRoomMember(context.Background(), testRoom, bob.ID))
 
@@ -477,6 +480,7 @@ func TestHandlePost_PushSkipsActiveRecipient(t *testing.T) {
 	ts.SeedRoom(t, model.Room{ID: testRoom, Name: "Test Room"})
 	ts.GrantAccess(t, testRoom, alice.ID)
 	require.NoError(t, ts.Redis.CreateUser(context.Background(), bob))
+	ts.GrantAccess(t, testRoom, bob.ID)
 	require.NoError(t, ts.Redis.TouchRoomMember(context.Background(), testRoom, alice.ID))
 	require.NoError(t, ts.Redis.TouchRoomMember(context.Background(), testRoom, bob.ID))
 
@@ -510,6 +514,7 @@ func TestHandlePost_PushDeliveredToInactiveRecipient(t *testing.T) {
 	ts.SeedRoom(t, model.Room{ID: testRoom, Name: "Test Room"})
 	ts.GrantAccess(t, testRoom, alice.ID)
 	require.NoError(t, ts.Redis.CreateUser(context.Background(), bob))
+	ts.GrantAccess(t, testRoom, bob.ID)
 	require.NoError(t, ts.Redis.TouchRoomMember(context.Background(), testRoom, alice.ID))
 	require.NoError(t, ts.Redis.TouchRoomMember(context.Background(), testRoom, bob.ID))
 
@@ -544,6 +549,7 @@ func TestHandlePost_MentionNotification(t *testing.T) {
 	ts.SeedRoom(t, model.Room{ID: testRoom, Name: "Test Room"})
 	ts.GrantAccess(t, testRoom, alice.ID)
 	require.NoError(t, ts.Redis.CreateUser(context.Background(), bob))
+	ts.GrantAccess(t, testRoom, bob.ID)
 	require.NoError(t, ts.Redis.TouchRoomMember(context.Background(), testRoom, alice.ID))
 	require.NoError(t, ts.Redis.TouchRoomMember(context.Background(), testRoom, bob.ID))
 
