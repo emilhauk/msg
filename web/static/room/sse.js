@@ -1,6 +1,7 @@
 import { attachImageLoadSnap } from '/static/room/scroll.js';
 import { applyOwnerControls } from '/static/room/owner-controls.js';
 import { __myReactions, applyMyReactions } from '/static/room/reactions.js';
+import { formatMessageTimes } from '/static/app/timestamps.js';
 
 // Second EventSource: handles unfurl, reaction, delete, edit, and version SSE events.
 // HTMX manages its own EventSource for "message" events; custom event types
@@ -71,6 +72,8 @@ async function doCatchUp() {
       }
     }
 
+    formatMessageTimes();
+
     // Snap to bottom so the user sees the freshest messages.
     const list = document.getElementById('message-list');
     if (list) list.scrollTop = list.scrollHeight;
@@ -125,6 +128,7 @@ function attachEsListeners(target) {
     if (newEl) {
       htmx.process(newEl);
       applyOwnerControls(newEl);
+      formatMessageTimes();
     }
   });
 

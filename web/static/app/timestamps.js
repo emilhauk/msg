@@ -4,11 +4,11 @@ function formatMessageTimes() {
   const yesterday = new Date(now);
   yesterday.setDate(now.getDate() - 1);
 
-  document.querySelectorAll('time.message__time').forEach((el) => {
+  document.querySelectorAll('time.message__time, time.message--system__time').forEach((el) => {
     const dt = new Date(el.getAttribute('datetime'));
     if (Number.isNaN(dt)) return;
 
-    const timeStr = dt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const timeStr = dt.toLocaleTimeString(navigator.languages, { hour: '2-digit', minute: '2-digit' });
 
     if (dt.toDateString() === now.toDateString()) {
       el.textContent = timeStr;
@@ -16,12 +16,12 @@ function formatMessageTimes() {
       el.textContent = `Yesterday at ${timeStr}`;
     } else if (dt.getFullYear() === now.getFullYear()) {
       el.textContent =
-        dt.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' }) +
+        dt.toLocaleDateString(navigator.languages, { weekday: 'short', day: 'numeric', month: 'short' }) +
         ' at ' +
         timeStr;
     } else {
       el.textContent =
-        dt.toLocaleDateString([], {
+        dt.toLocaleDateString(navigator.languages, {
           weekday: 'short',
           day: 'numeric',
           month: 'short',
@@ -35,3 +35,5 @@ function formatMessageTimes() {
 
 document.addEventListener('DOMContentLoaded', formatMessageTimes);
 document.addEventListener('htmx:afterSettle', formatMessageTimes);
+
+export { formatMessageTimes };
