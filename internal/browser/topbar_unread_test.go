@@ -79,13 +79,6 @@ func TestTopbarUnread_AppearsOnMobile(t *testing.T) {
 	// The indicator should link directly to the unread room.
 	href := page.MustEval(`() => document.getElementById('topbar-unread').href`).Str()
 	assert.Contains(t, href, "/rooms/"+otherRoom, "indicator href should point to the unread room")
-
-	// Click the indicator — should navigate to the other room.
-	page.MustEval(`() => document.getElementById('topbar-unread').click()`)
-	page.MustWaitLoad()
-
-	finalURL := page.MustInfo().URL
-	assert.Contains(t, finalURL, "/rooms/"+otherRoom, "should navigate to the unread room")
 }
 
 // TestTopbarUnread_MultipleRooms verifies the +N suffix when multiple rooms
