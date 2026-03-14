@@ -15,17 +15,75 @@ const previewsEl = document.getElementById('attachment-previews');
 const inputEl = document.getElementById('attachment-input');
 const fileInput = document.getElementById('file-input');
 if (ta && form && previewsEl && inputEl) {
+  const draftKey = `draft-attachments:${window.roomID}`;
   let pendingAttachments = []; // [{url, content_type, filename}]
   let uploadCount = 0; // number of uploads currently in-flight
 
   function syncInput() {
     inputEl.value = pendingAttachments.length ? JSON.stringify(pendingAttachments) : '';
+    // Persist finished attachments to localStorage for draft recovery.
+    if (pendingAttachments.length) localStorage.setItem(draftKey, JSON.stringify(pendingAttachments));
+    else localStorage.removeItem(draftKey);
   }
 
   function setSendDisabled(disabled) {
     const btn = form.querySelector('.message-form__send');
     if (btn) btn.disabled = disabled;
   }
+
+  // Restore saved attachments from a previous draft.
+  function restoreDraftAttachments() {
+    const raw = localStorage.getItem(draftKey);
+    if (!raw) return;
+    let saved;
+    try { saved = JSON.parse(raw); } catch (_) { return; }
+    if (!Array.isArray(saved) || saved.length === 0) return;
+
+    for (const att of saved) {
+      const idx = pendingAttachments.length;
+      pendingAttachments.push(att);
+
+      const chip = document.createElement('div');
+      chip.className = 'attachment-chip attachment-chip--done';
+      chip.dataset.attachmentIdx = idx;
+
+      if (att.content_type.startsWith('image/')) {
+        const thumb = document.createElement('img');
+        thumb.src = att.url;
+        thumb.alt = '';
+        chip.appendChild(thumb);
+      } else {
+        const icon = document.createElement('span');
+        icon.className = 'attachment-chip__icon';
+        icon.textContent = '\uD83C\uDFA5';
+        chip.appendChild(icon);
+      }
+
+      const removeBtn = document.createElement('button');
+      removeBtn.type = 'button';
+      removeBtn.className = 'attachment-chip__remove';
+      removeBtn.setAttribute('aria-label', 'Remove attachment');
+      removeBtn.textContent = '\u00D7';
+      removeBtn.addEventListener('click', () => {
+        const i = parseInt(chip.dataset.attachmentIdx, 10);
+        if (!Number.isNaN(i)) {
+          pendingAttachments.splice(i, 1);
+          const chips = previewsEl.querySelectorAll('.attachment-chip[data-attachment-idx]');
+          let counter = 0;
+          chips.forEach((c) => { c.dataset.attachmentIdx = counter++; });
+          syncInput();
+        }
+        chip.remove();
+        if (previewsEl.children.length === 0) previewsEl.hidden = true;
+      });
+      chip.appendChild(removeBtn);
+
+      previewsEl.appendChild(chip);
+    }
+    previewsEl.hidden = false;
+    syncInput();
+  }
+  restoreDraftAttachments();
 
   // Generate a 12-character random hex string to use as the file's key stem.
   function randomHex(len) {
@@ -225,6 +283,7 @@ if (ta && form && previewsEl && inputEl) {
   // Clear attachments when the form resets (fires after successful HTMX send).
   form.addEventListener('reset', () => {
     pendingAttachments = [];
+    localStorage.removeItem(draftKey);
     syncInput();
     previewsEl.innerHTML = '';
     previewsEl.hidden = true;

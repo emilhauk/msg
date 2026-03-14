@@ -118,6 +118,164 @@ func TestDraft_PerRoom(t *testing.T) {
 	assert.Equal(t, "draft for room A", val, "room A draft should be restored")
 }
 
+func TestDraft_AttachmentsPersistOnReload(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("skipping browser test in short mode")
+	}
+	const room = "room-draft-attach"
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: room, Name: "Draft Attach Test"})
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), alice))
+
+	b := newBrowser(t)
+	page := authPage(t, b, ts, alice, room)
+
+	// Inject attachment data into localStorage as if a previous session uploaded a file.
+	page.MustEval(`() => {
+		const att = [{ url: "https://s3.example.com/rooms/test/img.jpg", content_type: "image/jpeg", filename: "abc123" }];
+		localStorage.setItem('draft-attachments:' + window.roomID, JSON.stringify(att));
+	}`)
+
+	// Reload — attachment chips and hidden input should be restored.
+	page.MustReload()
+	page.MustWaitLoad()
+	time.Sleep(200 * time.Millisecond)
+
+	// Chip should be visible.
+	chipCount := page.MustEval(`() => document.querySelectorAll('.attachment-chip').length`).Int()
+	assert.Equal(t, 1, chipCount, "should restore one attachment chip")
+
+	// Hidden input should contain the attachment JSON.
+	inputVal := page.MustEval(`() => document.getElementById('attachment-input').value`).Str()
+	assert.Contains(t, inputVal, "img.jpg", "hidden input should contain restored attachment data")
+}
+
+func TestDraft_AttachmentsClearedOnSend(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("skipping browser test in short mode")
+	}
+	const room = "room-draft-attach-send"
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: room, Name: "Draft Attach Send Test"})
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), alice))
+
+	b := newBrowser(t)
+	page := authPage(t, b, ts, alice, room)
+
+	// Inject attachment data and reload to trigger restore.
+	page.MustEval(`() => {
+		const att = [{ url: "https://s3.example.com/rooms/test/img.jpg", content_type: "image/jpeg", filename: "abc123" }];
+		localStorage.setItem('draft-attachments:' + window.roomID, JSON.stringify(att));
+	}`)
+	page.MustReload()
+	page.MustWaitLoad()
+	time.Sleep(200 * time.Millisecond)
+
+	// Type some text so the message can be sent.
+	ta := page.MustElement(".message-form__textarea")
+	ta.MustClick()
+	ta.MustInput("with attachment")
+
+	// Submit via Enter key.
+	page.Keyboard.MustType(input.Enter)
+	time.Sleep(500 * time.Millisecond)
+
+	// Both draft keys should be cleared.
+	textNull := page.MustEval(`() => localStorage.getItem('draft:' + window.roomID) === null`).Bool()
+	assert.True(t, textNull, "text draft should be cleared after send")
+
+	attachNull := page.MustEval(`() => localStorage.getItem('draft-attachments:' + window.roomID) === null`).Bool()
+	assert.True(t, attachNull, "attachment draft should be cleared after send")
+
+	// No chips should remain.
+	chipCount := page.MustEval(`() => document.querySelectorAll('.attachment-chip').length`).Int()
+	assert.Equal(t, 0, chipCount, "attachment chips should be cleared after send")
+}
+
+func TestDraft_AttachmentsPerRoom(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("skipping browser test in short mode")
+	}
+	const roomA = "room-draft-attach-a"
+	const roomB = "room-draft-attach-b"
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: roomA, Name: "Attach Room A"})
+	ts.SeedRoom(t, model.Room{ID: roomB, Name: "Attach Room B"})
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), alice))
+	ts.GrantAccess(t, roomB, alice.ID)
+
+	b := newBrowser(t)
+	page := authPage(t, b, ts, alice, roomA)
+
+	// Inject attachment draft for room A.
+	page.MustEval(`() => {
+		const att = [{ url: "https://s3.example.com/rooms/a/img.jpg", content_type: "image/jpeg", filename: "aaa" }];
+		localStorage.setItem('draft-attachments:' + window.roomID, JSON.stringify(att));
+	}`)
+
+	// Navigate to room B — should have no chips.
+	page.MustNavigate(ts.Server.URL + "/rooms/" + roomB)
+	page.MustWaitLoad()
+	page.MustElement(".message-form__textarea")
+	time.Sleep(200 * time.Millisecond)
+
+	chipCount := page.MustEval(`() => document.querySelectorAll('.attachment-chip').length`).Int()
+	assert.Equal(t, 0, chipCount, "room B should have no attachment chips")
+
+	// Navigate back to room A — chip should be restored.
+	page.MustNavigate(ts.Server.URL + "/rooms/" + roomA)
+	page.MustWaitLoad()
+	page.MustElement(".message-form__textarea")
+	time.Sleep(200 * time.Millisecond)
+
+	chipCount = page.MustEval(`() => document.querySelectorAll('.attachment-chip').length`).Int()
+	assert.Equal(t, 1, chipCount, "room A should restore its attachment chip")
+}
+
+func TestDraft_AttachmentRemoveUpdatesStorage(t *testing.T) {
+	t.Parallel()
+	if testing.Short() {
+		t.Skip("skipping browser test in short mode")
+	}
+	const room = "room-draft-attach-rm"
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: room, Name: "Draft Remove Test"})
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), alice))
+
+	b := newBrowser(t)
+	page := authPage(t, b, ts, alice, room)
+
+	// Inject two attachments and reload.
+	page.MustEval(`() => {
+		const att = [
+			{ url: "https://s3.example.com/rooms/test/a.jpg", content_type: "image/jpeg", filename: "aaa" },
+			{ url: "https://s3.example.com/rooms/test/b.jpg", content_type: "image/jpeg", filename: "bbb" },
+		];
+		localStorage.setItem('draft-attachments:' + window.roomID, JSON.stringify(att));
+	}`)
+	page.MustReload()
+	page.MustWaitLoad()
+	time.Sleep(200 * time.Millisecond)
+
+	chipCount := page.MustEval(`() => document.querySelectorAll('.attachment-chip').length`).Int()
+	assert.Equal(t, 2, chipCount, "should restore two chips")
+
+	// Click remove on the first chip.
+	page.MustEval(`() => document.querySelector('.attachment-chip__remove').click()`)
+	time.Sleep(100 * time.Millisecond)
+
+	chipCount = page.MustEval(`() => document.querySelectorAll('.attachment-chip').length`).Int()
+	assert.Equal(t, 1, chipCount, "should have one chip after removal")
+
+	// localStorage should reflect the remaining attachment.
+	stored := page.MustEval(`() => localStorage.getItem('draft-attachments:' + window.roomID)`).Str()
+	assert.Contains(t, stored, "bbb", "remaining attachment should be in storage")
+	assert.NotContains(t, stored, "aaa", "removed attachment should not be in storage")
+}
+
 func TestDraft_EmptyRemovesKey(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {
