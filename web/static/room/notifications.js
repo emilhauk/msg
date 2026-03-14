@@ -104,7 +104,8 @@ if (needsPWAGuide) {
       return;
     }
     const hint = document.getElementById('update-hint');
-    if (hint) hint.hidden = false;
+    const unreadVisible = !document.getElementById('topbar-unread')?.hidden;
+    if (hint && !unreadVisible) hint.hidden = false;
   });
 
   navigator.serviceWorker

@@ -182,7 +182,7 @@ All payloads published to `rooms:{id}:events` use a prefix to identify type:
 Payloads published to `users:{uuid}:events` (user-level channel):
 
 ```
-"unread:<json>"          → event: unread   (JS: increment badge for { roomId })
+"unread:<json>"          → event: unread   (JS: increment badge for { roomId }; sync topbar indicator)
 ```
 
 On connect the server also sends:
@@ -203,6 +203,14 @@ The room page opens **three** `EventSource` connections:
 
 Rationale for #1/#2 split: HTMX's SSE extension silently drops event types it is not `sse-swap`-ing.
 Rationale for #3: user-level events (unread counts, future invites/DMs) are not room-scoped. Imported from `app.js` (not `room.js`) because it's a user-level concern, but gated to room pages since non-room pages have no sidebar badges to update.
+
+---
+
+## Mobile Top-bar Unread Indicator
+
+On mobile (`≤640px`) the room sidebar is hidden. `#topbar-unread` in the site header (between logo and bell/profile actions) shows the room with the highest unread count plus a `+N` suffix for additional unread rooms. Clicking it navigates directly to the unread room (href updated dynamically by `syncTopbarUnread()`).
+
+`syncTopbarUnread()` in `user-sse.js` queries visible `.room-sidebar__badge` elements, finds the highest count, and updates the indicator text and href. Called after each `unread` SSE event, on sidebar link click (badge clear), and on initial page load.
 
 ---
 

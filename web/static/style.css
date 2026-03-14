@@ -2030,6 +2030,54 @@ emoji-picker {
 }
 
 /* ============================================================
+   Top-bar unread indicator (mobile only)
+   ============================================================ */
+.topbar-unread {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  gap: .25rem;
+  flex: 1;
+  min-width: 0;
+  text-decoration: none;
+  color: var(--color-text);
+  font-size: .8125rem;
+  font-weight: 600;
+  animation: topbar-unread-in .25s ease both;
+}
+
+.topbar-unread__room {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-unread__count {
+  background: var(--color-primary);
+  color: #fff;
+  font-size: .75rem;
+  padding: 0 .35rem;
+  border-radius: .625rem;
+  min-width: 1.25rem;
+  height: 1.25rem;
+  line-height: 1.25rem;
+  text-align: center;
+  flex-shrink: 0;
+}
+
+.topbar-unread__more {
+  color: var(--color-text-muted);
+  font-weight: 500;
+  flex-shrink: 0;
+  font-size: .75rem;
+}
+
+@keyframes topbar-unread-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
    Responsive
    ============================================================ */
 @media (max-width: 640px) {
@@ -2039,6 +2087,9 @@ emoji-picker {
 
   /* Show sidebar toggle button */
   .room-sidebar-toggle { display: inline-flex; }
+
+  /* Show top-bar unread indicator */
+  .topbar-unread:not([hidden]) { display: flex; }
 
   /* Sidebar: hidden off-screen by default, slides in as full-screen overlay */
   .room-sidebar {

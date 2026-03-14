@@ -1,6 +1,52 @@
 // User-level SSE: listens on /user/events for cross-room notifications
 // (unread badge increments). Follows the same lifecycle as room/sse.js.
 
+function syncTopbarUnread() {
+  const el = document.getElementById('topbar-unread');
+  if (!el) return;
+
+  const badges = document.querySelectorAll('.room-sidebar__badge:not([hidden])');
+  if (!badges.length) {
+    el.hidden = true;
+    return;
+  }
+
+  // Find the badge with the highest count and collect totals.
+  let maxCount = 0;
+  let maxName = '';
+  let maxHref = '#';
+  badges.forEach((badge) => {
+    const text = badge.textContent.trim();
+    const count = text === '99+' ? 100 : (parseInt(text, 10) || 0);
+    if (count > maxCount) {
+      maxCount = count;
+      const link = badge.closest('.room-sidebar__link');
+      const nameEl = link?.querySelector('.room-sidebar__name');
+      maxName = nameEl ? nameEl.textContent.trim() : '';
+      maxHref = link ? link.href : '#';
+    }
+  });
+
+  const hint = document.getElementById('update-hint');
+
+  if (maxCount <= 0) {
+    el.hidden = true;
+    return;
+  }
+
+  document.getElementById('topbar-unread-room').textContent = maxName;
+  document.getElementById('topbar-unread-count').textContent = maxCount > 99 ? '99+' : String(maxCount);
+  el.href = maxHref;
+
+  const otherCount = badges.length - 1;
+  const moreEl = document.getElementById('topbar-unread-more');
+  moreEl.textContent = otherCount > 0 ? `+${otherCount}` : '';
+
+  // Suppress the update-available hint while the unread indicator is shown.
+  if (hint) hint.hidden = true;
+  el.hidden = false;
+}
+
 function attachUserListeners(source) {
   source.addEventListener('unread', (e) => {
     let data;
@@ -15,6 +61,8 @@ function attachUserListeners(source) {
     const next = current + 1;
     badge.textContent = next > 99 ? '99+' : String(next);
     badge.hidden = false;
+
+    syncTopbarUnread();
   });
 }
 
@@ -37,6 +85,7 @@ document.addEventListener('click', (e) => {
     badge.hidden = true;
     badge.textContent = '0';
   }
+  syncTopbarUnread();
 });
 
 // Lifecycle: close on hide, reopen on visible/pageshow.
@@ -55,3 +104,6 @@ window.addEventListener('pageshow', (e) => {
     openUserEs();
   }
 });
+
+// Sync on initial load to pick up server-rendered unread counts.
+syncTopbarUnread();

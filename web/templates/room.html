@@ -5,6 +5,12 @@
 {{define "title"}}{{.Data.Room.Name}} — msg.{{end}}
 
 {{define "header-right"}}
+<a class="topbar-unread" id="topbar-unread" href="#" hidden
+   aria-label="Unread messages">
+  <span class="topbar-unread__room" id="topbar-unread-room"></span>
+  <span class="topbar-unread__count" id="topbar-unread-count"></span>
+  <span class="topbar-unread__more" id="topbar-unread-more"></span>
+</a>
 <div class="site-header__actions">
   {{/* Notification bell — states: off (no permission/not subscribed), on (subscribed), muted */}}
   <div class="notif-wrap" id="notif-wrap">

@@ -102,7 +102,8 @@ function attachEsListeners(target) {
     }
     __pendingReload = true;
     const hint = document.getElementById('update-hint');
-    if (hint) hint.hidden = false;
+    const unreadVisible = !document.getElementById('topbar-unread')?.hidden;
+    if (hint && !unreadVisible) hint.hidden = false;
   });
 
   target.addEventListener('redirect', (e) => {
