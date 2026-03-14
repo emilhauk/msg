@@ -199,10 +199,10 @@ The room page opens **three** `EventSource` connections:
 
 1. **HTMX-managed** (`sse-connect` on `<section>`) → `/rooms/{id}/events`: handles `event: message` only via `sse-swap`.
 2. **Vanilla JS-managed** (`room/sse.js`) → `/rooms/{id}/events`: handles `unfurl`, `reaction`, `delete`, `edit`, `memberstatus`, and `version`.
-3. **User-level** (`room/user-sse.js`) → `/user/events`: handles `unread` badge increments for other rooms.
+3. **User-level** (`room/user-sse.js`, imported from `app.js`) → `/user/events`: handles `unread` badge increments for other rooms. Guarded by `window.roomID` so it only connects on room pages.
 
 Rationale for #1/#2 split: HTMX's SSE extension silently drops event types it is not `sse-swap`-ing.
-Rationale for #3: user-level events (unread counts, future invites/DMs) are not room-scoped.
+Rationale for #3: user-level events (unread counts, future invites/DMs) are not room-scoped. Imported from `app.js` (not `room.js`) because it's a user-level concern, but gated to room pages since non-room pages have no sidebar badges to update.
 
 ---
 

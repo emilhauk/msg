@@ -25,7 +25,7 @@ function openUserEs() {
 }
 
 let userEs = null;
-openUserEs();
+if (window.roomID) openUserEs();
 
 // Clear badge on sidebar link click for instant feedback.
 document.addEventListener('click', (e) => {
@@ -45,13 +45,13 @@ window.addEventListener('pagehide', () => { if (userEs) { userEs.close(); userEs
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     if (userEs) { userEs.close(); userEs = null; }
-  } else {
+  } else if (window.roomID) {
     openUserEs();
   }
 });
 
 window.addEventListener('pageshow', (e) => {
-  if (e.persisted) {
+  if (e.persisted && window.roomID) {
     openUserEs();
   }
 });

@@ -9,4 +9,3 @@ import '/static/room/edit.js';
 import '/static/room/keyboard.js';
 import '/static/room/notifications.js';
 import '/static/room/heartbeat.js';
-import '/static/room/user-sse.js';
