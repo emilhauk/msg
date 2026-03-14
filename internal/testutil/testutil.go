@@ -164,6 +164,7 @@ func buildMux(rc *redisclient.Client, renderer *tmpl.Renderer, webFS fs.FS, secr
 
 	mux.Handle("GET /", authMW(http.HandlerFunc(roomsHandler.HandleRoot)))
 	mux.Handle("POST /rooms", authMW(http.HandlerFunc(roomsHandler.HandleCreate)))
+	mux.Handle("GET /rooms/unread-counts", authMW(http.HandlerFunc(roomsHandler.HandleUnreadCounts)))
 	mux.Handle("GET /rooms/{id}", authMW(http.HandlerFunc(roomsHandler.HandleRoom)))
 	mux.Handle("GET /rooms/{id}/panel", authMW(http.HandlerFunc(roomsHandler.HandlePanel)))
 	mux.Handle("POST /rooms/{id}/access", authMW(http.HandlerFunc(roomsHandler.HandleAddAccess)))

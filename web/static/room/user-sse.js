@@ -88,6 +88,34 @@ document.addEventListener('click', (e) => {
   syncTopbarUnread();
 });
 
+// Fetch unread counts from the server and update sidebar badges.
+// Called on tab resume to catch up on messages missed while hidden.
+async function fetchUnreadCounts() {
+  try {
+    const resp = await fetch('/rooms/unread-counts');
+    if (!resp.ok) return;
+    const counts = await resp.json();
+
+    document.querySelectorAll('.room-sidebar__badge').forEach((badge) => {
+      const link = badge.closest('.room-sidebar__link[data-room-id]');
+      if (!link) return;
+      const rid = link.dataset.roomId;
+      // Skip the current room — user is already viewing it.
+      if (rid === window.roomID) return;
+      const count = counts[rid] || 0;
+      if (count > 0) {
+        badge.textContent = count > 99 ? '99+' : String(count);
+        badge.hidden = false;
+      } else {
+        badge.textContent = '0';
+        badge.hidden = true;
+      }
+    });
+
+    syncTopbarUnread();
+  } catch (_) { /* network error — ignore */ }
+}
+
 // Lifecycle: close on hide, reopen on visible/pageshow.
 window.addEventListener('pagehide', () => { if (userEs) { userEs.close(); userEs = null; } });
 
@@ -96,12 +124,14 @@ document.addEventListener('visibilitychange', () => {
     if (userEs) { userEs.close(); userEs = null; }
   } else if (window.roomID) {
     openUserEs();
+    fetchUnreadCounts();
   }
 });
 
 window.addEventListener('pageshow', (e) => {
   if (e.persisted && window.roomID) {
     openUserEs();
+    fetchUnreadCounts();
   }
 });
 

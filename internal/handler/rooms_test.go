@@ -2,6 +2,7 @@ package handler_test
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -153,6 +154,65 @@ func TestHandleRoom_NoUnreadBadge_CurrentRoom(t *testing.T) {
 		"badge element should exist for the current room")
 	assert.Contains(t, html, fmt.Sprintf(`id="unread-badge-%s" hidden`, testRoom),
 		"current room badge should be hidden")
+}
+
+// ---------------------------------------------------------------------------
+// Unread counts endpoint
+// ---------------------------------------------------------------------------
+
+func TestHandleUnreadCounts_ReturnsJSON(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+
+	ts.SeedRoom(t, model.Room{ID: "room-a", Name: "Room A"})
+	ts.SeedRoom(t, model.Room{ID: "room-b", Name: "Room B"})
+	ts.GrantAccess(t, "room-a", alice.ID)
+	ts.GrantAccess(t, "room-b", alice.ID)
+	cookie := ts.AuthCookie(t, alice)
+
+	now := time.Now()
+
+	// Set alice's last_active for both rooms, then post messages only in room-b.
+	require.NoError(t, ts.Redis.SetRoomLastActive(context.Background(), alice.ID, "room-a"))
+	require.NoError(t, ts.Redis.SetRoomLastActive(context.Background(), alice.ID, "room-b"))
+
+	for i := 1; i <= 3; i++ {
+		ms := now.Add(time.Duration(i) * time.Second).UnixMilli()
+		msg := model.Message{
+			ID:          fmt.Sprintf("%d-%s", ms, "other-user"),
+			RoomID:      "room-b",
+			UserID:      "other-user",
+			Text:        "hello",
+			CreatedAtMS: fmt.Sprintf("%d", ms),
+		}
+		require.NoError(t, ts.Redis.SaveMessage(context.Background(), msg))
+	}
+
+	req, _ := http.NewRequest("GET", ts.Server.URL+"/rooms/unread-counts", nil)
+	req.AddCookie(cookie)
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Contains(t, resp.Header.Get("Content-Type"), "application/json")
+
+	var counts map[string]int
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&counts))
+	assert.Equal(t, 3, counts["room-b"], "room-b should have 3 unread")
+	_, hasRoomA := counts["room-a"]
+	assert.False(t, hasRoomA, "room-a should not appear (0 unread)")
+}
+
+func TestHandleUnreadCounts_Unauthenticated(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+
+	client := testutil.NoRedirectClient()
+	req, _ := http.NewRequest("GET", ts.Server.URL+"/rooms/unread-counts", nil)
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusFound, resp.StatusCode)
+	assert.Contains(t, resp.Header.Get("Location"), "/login")
 }
 
 // ---------------------------------------------------------------------------

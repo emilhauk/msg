@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -313,6 +314,29 @@ func (h *RoomsHandler) HandleLeave(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.Redirect(w, r, "/", http.StatusSeeOther)
+}
+
+// HandleUnreadCounts returns JSON { roomId: count, ... } for all accessible
+// rooms with unread > 0. Used by the client to catch up after tab resume.
+func (h *RoomsHandler) HandleUnreadCounts(w http.ResponseWriter, r *http.Request) {
+	user := middleware.UserFromContext(r.Context())
+	rooms, err := h.Redis.GetAccessibleRooms(r.Context(), user.ID)
+	if err != nil {
+		http.Error(w, "failed to load rooms", http.StatusInternalServerError)
+		return
+	}
+	if err := h.Redis.GetUnreadCounts(r.Context(), user.ID, rooms); err != nil {
+		http.Error(w, "failed to load unread counts", http.StatusInternalServerError)
+		return
+	}
+	counts := make(map[string]int)
+	for _, rm := range rooms {
+		if rm.UnreadCount > 0 {
+			counts[rm.ID] = rm.UnreadCount
+		}
+	}
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(counts)
 }
 
 // HandleJoin handles GET /join/{token} — accepts an invite link. The user must
