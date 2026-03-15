@@ -31,7 +31,6 @@ func (c Config) IsConfigured() bool {
 
 // Payload is the JSON body delivered by the Service Worker push event.
 type Payload struct {
-	Action    string `json:"action,omitempty"` // "" = show notification, "clear" = dismiss
 	Title     string `json:"title"`
 	Body      string `json:"body"`
 	Icon      string `json:"icon,omitempty"`

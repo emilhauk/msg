@@ -3,12 +3,12 @@
 // Served at /sw.js (root scope) with no-cache headers.
 
 // Chrome requires every push event to call showNotification(). When we
-// don't want the user to actually see one (e.g. visible tab, or a
-// data-only "clear" push), show a silent notification and close it
-// immediately to satisfy the requirement.
+// don't want the user to actually see one (e.g. visible tab), show a
+// silent notification and close it immediately to satisfy the requirement.
 function suppressNotification() {
   return self.registration
     .showNotification('', { tag: 'suppress', silent: true })
+    .then(() => new Promise((resolve) => setTimeout(resolve, 100)))
     .then(() => self.registration.getNotifications({ tag: 'suppress' }))
     .then((notifications) => {
       for (const n of notifications) n.close();
@@ -27,18 +27,6 @@ self.addEventListener('push', (event) => {
     payload = event.data.json();
   } catch (_e) {
     payload = { title: 'New message', body: event.data.text() };
-  }
-
-  // Data-only "clear" push: dismiss notifications for the given tag.
-  if (payload.action === 'clear') {
-    const tag = payload.tag;
-    const clear = tag
-      ? self.registration.getNotifications({ tag }).then((notifications) => {
-          for (const n of notifications) n.close();
-        })
-      : Promise.resolve();
-    event.waitUntil(Promise.all([suppressNotification(), clear]));
-    return;
   }
 
   const title = payload.title || 'New message';

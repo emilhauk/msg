@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -9,7 +8,6 @@ import (
 	"github.com/emilhauk/msg/internal/middleware"
 	redisclient "github.com/emilhauk/msg/internal/redis"
 	"github.com/emilhauk/msg/internal/webpush"
-	"github.com/rs/zerolog/log"
 )
 
 // NotificationsHandler handles Web Push subscription management and mute settings.
@@ -179,9 +177,6 @@ func (h *NotificationsHandler) HandleRoomActive(w http.ResponseWriter, r *http.R
 
 	if !wasViewing {
 		_ = h.Redis.BroadcastMemberStatus(r.Context(), roomID, user.ID, true)
-		if h.Push != nil {
-			go h.sendClearPush(user.ID, roomID)
-		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -201,32 +196,6 @@ func (h *NotificationsHandler) HandleRoomInactive(w http.ResponseWriter, r *http
 	_ = h.Redis.ClearRoomViewing(r.Context(), user.ID, roomID)
 	_ = h.Redis.BroadcastMemberStatus(r.Context(), roomID, user.ID, true)
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// sendClearPush sends a data-only "clear" push to all of the user's subscriptions
-// so that other devices dismiss notifications for the given room.
-func (h *NotificationsHandler) sendClearPush(userID, roomID string) {
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-	defer cancel()
-
-	subs, err := h.Redis.GetAllPushSubscriptions(ctx, userID)
-	if err != nil {
-		log.Ctx(ctx).Error().Err(err).Str("user_id", userID).Msg("clear-push: fetch subscriptions")
-		return
-	}
-	if len(subs) == 0 {
-		return
-	}
-
-	payload := webpush.Payload{
-		Action: "clear",
-		Tag:    "msg-" + roomID,
-		RoomID: roomID,
-	}
-	expired := h.Push.SendToMany(ctx, subs, payload)
-	for _, ep := range expired {
-		_ = h.Redis.DeletePushSubscription(ctx, userID, ep)
-	}
 }
 
 // HandleRoomMembers returns the list of room members for @mention autocomplete.
