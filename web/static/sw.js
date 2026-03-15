@@ -2,6 +2,19 @@
 // Handles Web Push notifications.
 // Served at /sw.js (root scope) with no-cache headers.
 
+// Chrome requires every push event to call showNotification(). When we
+// don't want the user to actually see one (e.g. visible tab, or a
+// data-only "clear" push), show a silent notification and close it
+// immediately to satisfy the requirement.
+function suppressNotification() {
+  return self.registration
+    .showNotification('', { tag: 'suppress', silent: true })
+    .then(() => self.registration.getNotifications({ tag: 'suppress' }))
+    .then((notifications) => {
+      for (const n of notifications) n.close();
+    });
+}
+
 // ---- Push event -------------------------------------------------------
 // Called when the server sends a Web Push notification.
 // If any tab has the app open and focused, we suppress the OS notification
@@ -19,13 +32,12 @@ self.addEventListener('push', (event) => {
   // Data-only "clear" push: dismiss notifications for the given tag.
   if (payload.action === 'clear') {
     const tag = payload.tag;
-    if (tag) {
-      event.waitUntil(
-        self.registration.getNotifications({ tag }).then((notifications) => {
+    const clear = tag
+      ? self.registration.getNotifications({ tag }).then((notifications) => {
           for (const n of notifications) n.close();
-        }),
-      );
-    }
+        })
+      : Promise.resolve();
+    event.waitUntil(Promise.all([suppressNotification(), clear]));
     return;
   }
 
@@ -44,16 +56,9 @@ self.addEventListener('push', (event) => {
   console.log('[sw] push received', title);
 
   event.waitUntil(
-    // Check if any tab is currently visible (document.visibilityState === 'visible').
-    // clients.matchAll returns all controlled clients (tabs/windows).
     self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) => {
       const hasVisibleTab = clients.some((c) => c.visibilityState === 'visible');
-
-      if (hasVisibleTab) {
-        // A tab is already showing the app — the in-tab notification handles it.
-        return;
-      }
-
+      if (hasVisibleTab) return suppressNotification();
       return self.registration.showNotification(title, options);
     }),
   );
