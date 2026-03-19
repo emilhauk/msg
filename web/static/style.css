@@ -1024,6 +1024,19 @@ img { display: block; max-width: 100%; }
   white-space: nowrap;
 }
 
+/* -- Continuation grouping (consecutive same-author messages) -- */
+.message--continuation {
+  padding-top: .125rem;
+}
+.message--continuation .message__avatar {
+  visibility: hidden;
+}
+.message--continuation .message__author,
+.message--continuation .message__time,
+.message--continuation .message__edited {
+  display: none;
+}
+
 .message__text {
   font-size: .9375rem;
   line-height: 1.55;
@@ -2083,6 +2096,7 @@ emoji-picker {
 @media (max-width: 640px) {
   :root { --sidebar-w: 0px; }
   .message { padding: .4rem .875rem; }
+  .message--continuation { padding-top: .0625rem; }
   .message-form { padding: .5rem .875rem .75rem; }
 
   /* Show sidebar toggle button */
