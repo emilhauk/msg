@@ -5,6 +5,7 @@ import '/static/room/draft.js';
 import '/static/room/upload.js';
 import '/static/room/autocomplete.js';
 import '/static/room/reactions.js';
+import '/static/room/grouping.js';
 import '/static/room/sse.js';
 import '/static/room/edit.js';
 import '/static/room/keyboard.js';

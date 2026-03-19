@@ -2,6 +2,7 @@ import { attachImageLoadSnap } from '/static/room/scroll.js';
 import { applyOwnerControls } from '/static/room/owner-controls.js';
 import { __myReactions, applyMyReactions } from '/static/room/reactions.js';
 import { formatMessageTimes } from '/static/app/timestamps.js';
+import { applyGrouping, applyGroupingAround } from '/static/room/grouping.js';
 
 // Second EventSource: handles unfurl, reaction, delete, edit, and version SSE events.
 // HTMX manages its own EventSource for "message" events; custom event types
@@ -73,6 +74,7 @@ async function doCatchUp() {
     }
 
     formatMessageTimes();
+    applyGrouping();
 
     // Snap to bottom so the user sees the freshest messages.
     const list = document.getElementById('message-list');
@@ -112,7 +114,11 @@ function attachEsListeners(target) {
 
   target.addEventListener('delete', (e) => {
     const el = document.getElementById(`msg-${e.data.trim()}`);
-    if (el) el.remove();
+    if (el) {
+      const next = el.nextElementSibling;
+      el.remove();
+      applyGroupingAround(next);
+    }
   });
 
   target.addEventListener('edit', (e) => {
@@ -129,6 +135,7 @@ function attachEsListeners(target) {
     if (newEl) {
       htmx.process(newEl);
       applyOwnerControls(newEl);
+      applyGroupingAround(newEl);
       formatMessageTimes();
     }
   });
