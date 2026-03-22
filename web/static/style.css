@@ -16,6 +16,7 @@
   --color-google:      #ffffff;
   --color-google-border: #dadce0;
   --color-discord:     #5865f2;
+  --color-surface:     #ffffff;
 
   --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, 'Cascadia Code', 'Fira Code', monospace;
@@ -49,6 +50,7 @@
     --color-primary-hover: #6c77e8;
     --color-github:      #e8eaed;
     --color-google:      #2d3038;
+    --color-surface:     #2a2e37;
     --color-google-border: #3c4150;
   }
 }
@@ -65,6 +67,7 @@
   --color-primary-hover: #6c77e8;
   --color-github:      #e8eaed;
   --color-google:      #2d3038;
+  --color-surface:     #2a2e37;
   --color-google-border: #3c4150;
 }
 
@@ -2247,25 +2250,28 @@ emoji-picker {
 /* ============================================================
    Action Sheet (mobile message actions)
    ============================================================ */
+.action-sheet:not([open]) {
+  display: none;
+}
+
 .action-sheet {
   position: fixed;
-  bottom: 0;
-  left: 0;
+  inset: 0;
   width: 100%;
   max-width: 100%;
-  max-height: 100%;
+  height: 100%;
+  max-height: none;
   margin: 0;
   padding: 0;
   border: none;
-  border-radius: var(--radius-lg, 16px) var(--radius-lg, 16px) 0 0;
-  background: var(--color-surface);
+  background: transparent;
   color: var(--color-text);
-  box-shadow: 0 -4px 24px rgba(0, 0, 0, .15);
-  overflow: hidden;
 }
 
 .action-sheet::backdrop {
-  background: rgba(0, 0, 0, .9);
+  background: rgba(0, 0, 0, .15);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   animation: action-sheet-fade-in 250ms ease;
 }
 
@@ -2277,11 +2283,11 @@ emoji-picker {
   animation: action-sheet-fade-out 200ms ease forwards;
 }
 
-.action-sheet[open] {
+.action-sheet[open] > .action-sheet__content {
   animation: action-sheet-slide-up 250ms ease;
 }
 
-.action-sheet.is-closing {
+.action-sheet.is-closing > .action-sheet__content {
   animation: action-sheet-slide-down 200ms ease forwards;
 }
 
@@ -2306,6 +2312,15 @@ emoji-picker {
 }
 
 .action-sheet__content {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  background: var(--color-surface);
+  border-radius: var(--radius-lg, 16px) var(--radius-lg, 16px) 0 0;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, .15);
   padding: 0 0 calc(.5rem + env(safe-area-inset-bottom, 0px));
   transition: transform .15s ease;
 }

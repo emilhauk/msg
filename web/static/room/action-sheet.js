@@ -10,7 +10,6 @@ if (!isTouchDevice) {
   document.body.dataset.actionSheet = '';
 
   const dialog = document.getElementById('message-actions');
-  const handle = dialog.querySelector('.action-sheet__handle');
   const btnReact = dialog.querySelector('[data-action="react"]');
   const btnCopy = dialog.querySelector('[data-action="copy"]');
   const btnEdit = dialog.querySelector('[data-action="edit"]');
@@ -186,31 +185,36 @@ if (!isTouchDevice) {
     closeSheet();
   });
 
-  // ---- Drag-to-dismiss on handle ----
+  // ---- Swipe-down-to-dismiss (anywhere except emoji picker scroll) ----
   let startY = 0;
   let currentY = 0;
   let dragging = false;
   const DISMISS_THRESHOLD = 80;
+  const content = dialog.querySelector('.action-sheet__content');
 
-  handle.addEventListener('pointerdown', (e) => {
+  function isInsideEmojiPicker(target) {
+    return !!target.closest('emoji-picker');
+  }
+
+  dialog.addEventListener('touchstart', (e) => {
+    if (isInsideEmojiPicker(e.target)) return;
     dragging = true;
-    startY = e.clientY;
+    startY = e.touches[0].clientY;
     currentY = 0;
-    handle.setPointerCapture(e.pointerId);
-    dialog.querySelector('.action-sheet__content').style.transition = 'none';
-  });
+    content.style.transition = 'none';
+  }, { passive: true });
 
-  handle.addEventListener('pointermove', (e) => {
+  dialog.addEventListener('touchmove', (e) => {
     if (!dragging) return;
-    const dy = Math.max(0, e.clientY - startY);
+    const dy = Math.max(0, e.touches[0].clientY - startY);
     currentY = dy;
-    dialog.querySelector('.action-sheet__content').style.transform = `translateY(${dy}px)`;
-  });
+    if (dy > 0) e.preventDefault();
+    content.style.transform = `translateY(${dy}px)`;
+  }, { passive: false });
 
-  handle.addEventListener('pointerup', () => {
+  dialog.addEventListener('touchend', () => {
     if (!dragging) return;
     dragging = false;
-    const content = dialog.querySelector('.action-sheet__content');
     content.style.transition = '';
     content.style.transform = '';
     if (currentY > DISMISS_THRESHOLD) {
@@ -218,10 +222,9 @@ if (!isTouchDevice) {
     }
   });
 
-  handle.addEventListener('pointercancel', () => {
+  dialog.addEventListener('touchcancel', () => {
     if (!dragging) return;
     dragging = false;
-    const content = dialog.querySelector('.action-sheet__content');
     content.style.transition = '';
     content.style.transform = '';
   });
