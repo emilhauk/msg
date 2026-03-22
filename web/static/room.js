@@ -8,6 +8,7 @@ import '/static/room/reactions.js';
 import '/static/room/grouping.js';
 import '/static/room/sse.js';
 import '/static/room/edit.js';
+import '/static/room/action-sheet.js';
 import '/static/room/keyboard.js';
 import '/static/room/notifications.js';
 import '/static/room/heartbeat.js';
