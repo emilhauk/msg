@@ -934,38 +934,54 @@ img { display: block; max-width: 100%; }
   opacity: .75;
 }
 
-.message__edit {
+/* ---- Floating message toolbar (Slack-style hover actions) ---- */
+.message__toolbar {
+  position: absolute;
+  top: -.75rem;
+  right: .75rem;
+  display: flex;
+  gap: 1px;
+  background: var(--color-bg-subtle);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
   opacity: 0;
-  color: var(--color-text-muted);
-  transition: opacity .15s, color .15s;
-  align-self: center;
+  pointer-events: none;
+  transition: opacity .12s;
+  z-index: 1;
 }
 
-.message:hover .message__edit:not([hidden]),
-.message__edit:focus-visible:not([hidden]) {
+.message {
+  position: relative;
+}
+
+.message:hover .message__toolbar,
+.message__toolbar:focus-within {
   opacity: 1;
+  pointer-events: auto;
 }
 
-.message__edit:hover {
-  color: var(--color-primary);
-}
-
-.message__delete {
-  margin-left: auto;
-  opacity: 0;
+.message__toolbar-btn {
   color: var(--color-text-muted);
-  transition: opacity .15s, color .15s;
-  /* Keep the button in flow so it doesn't shift other meta items */
-  align-self: center;
+  padding: .25rem .375rem;
+  border-radius: 0;
+  transition: background .1s, color .1s;
 }
+.message__toolbar-btn:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
+.message__toolbar-btn:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
+.message__toolbar-btn:only-child { border-radius: var(--radius-sm); }
 
-.message:hover .message__delete:not([hidden]),
-.message__delete:focus-visible:not([hidden]) {
-  opacity: 1;
+.message__toolbar-btn:hover {
+  background: var(--color-bg-subtle);
+  color: var(--color-text);
 }
+.message__toolbar-btn[hidden] { display: none; }
 
-.message__delete:hover {
-  color: var(--color-danger);
+.message__delete:hover { color: var(--color-danger); }
+.message__edit:hover { color: var(--color-primary); }
+
+.message__toolbar-btn svg {
+  width: 16px;
+  height: 16px;
 }
 
 .message--deleting {
@@ -974,8 +990,9 @@ img { display: block; max-width: 100%; }
   transition: opacity .15s;
 }
 
-.message--deleting .message__delete {
+.message--deleting .message__toolbar {
   opacity: 1;
+  pointer-events: none;
 }
 
 /* Keyboard-navigation: active message highlighted by arrow keys */
@@ -985,18 +1002,22 @@ img { display: block; max-width: 100%; }
   border-radius: var(--radius-sm);
 }
 
-/* Keep action buttons visible on the active message */
-.message--active .message__edit:not([hidden]),
-.message--active .message__delete:not([hidden]) {
+.message--active .message__toolbar {
   opacity: 1;
+  pointer-events: auto;
 }
 
-/* Touch devices: always show edit/delete controls (no hover available) */
+/* No-JS touch fallback: show toolbar when action sheet JS hasn't loaded */
 @media (hover: none) {
-  .message__edit:not([hidden]),
-  .message__delete:not([hidden]) {
+  body:not([data-action-sheet]) .message__toolbar {
     opacity: 1;
+    pointer-events: auto;
   }
+}
+
+/* Action sheet active: hide the toolbar — actions live in the sheet */
+body[data-action-sheet] .message__toolbar {
+  display: none;
 }
 
 /* System messages (join / leave) */
@@ -1291,18 +1312,15 @@ img { display: block; max-width: 100%; }
   border-radius: var(--radius-pill);
   color: var(--color-text-muted);
   background: transparent;
-  opacity: 0;
-  transition: opacity .12s, border-color .12s, color .12s;
+  transition: border-color .12s, color .12s;
 }
-.message:hover .reaction-add,
-.reactions:hover .reaction-add,
-.reaction-add:focus-visible { opacity: 1; }
 .reaction-add:hover { border-color: var(--color-primary); color: var(--color-primary); }
 
-/* Touch devices: always show the add-reaction button (no hover available) */
-@media (hover: none) {
-  .reaction-add { opacity: 1; }
+/* Hide the entire reactions bar when there are no pills (the add button lives in the toolbar) */
+.reactions:not(:has(.reaction-pill)) {
+  display: none;
 }
+
 
 /* Compact reaction picker — approximately four visible emoji rows */
 #emoji-picker-container[data-mode="reaction"] emoji-picker {
@@ -2223,4 +2241,168 @@ emoji-picker {
   height: 1em;
   vertical-align: -.125em;
   display: inline-block;
+}
+
+/* ============================================================
+   Action Sheet (mobile message actions)
+   ============================================================ */
+.action-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  max-width: 100%;
+  max-height: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-lg, 16px) var(--radius-lg, 16px) 0 0;
+  background: var(--color-surface);
+  color: var(--color-text);
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, .15);
+  overflow: hidden;
+}
+
+.action-sheet::backdrop {
+  background: rgba(0, 0, 0, .9);
+  animation: action-sheet-fade-in 250ms ease;
+}
+
+.message--sheet-target {
+  background: var(--color-bg-subtle);
+}
+
+.action-sheet.is-closing::backdrop {
+  animation: action-sheet-fade-out 200ms ease forwards;
+}
+
+.action-sheet[open] {
+  animation: action-sheet-slide-up 250ms ease;
+}
+
+.action-sheet.is-closing {
+  animation: action-sheet-slide-down 200ms ease forwards;
+}
+
+@keyframes action-sheet-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+@keyframes action-sheet-slide-down {
+  from { transform: translateY(0); }
+  to   { transform: translateY(100%); }
+}
+
+@keyframes action-sheet-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes action-sheet-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+
+.action-sheet__content {
+  padding: 0 0 calc(.5rem + env(safe-area-inset-bottom, 0px));
+  transition: transform .15s ease;
+}
+
+.action-sheet__handle {
+  display: flex;
+  justify-content: center;
+  padding: .75rem 0 .5rem;
+  cursor: grab;
+  touch-action: none;
+}
+
+.action-sheet__pill {
+  width: 36px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--color-border);
+}
+
+.action-sheet__preview {
+  max-height: 5.5rem;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.action-sheet__preview:empty {
+  display: none;
+}
+
+.action-sheet__preview:empty + .action-sheet__preview-sep {
+  display: none;
+}
+
+/* Override message styles inside the preview clone */
+.action-sheet__preview .message {
+  padding: .375rem 1.25rem;
+  background: transparent;
+}
+
+.action-sheet__preview .message__text {
+  white-space: normal;
+}
+
+.action-sheet__item {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  width: 100%;
+  padding: .875rem 1.25rem;
+  border: none;
+  background: none;
+  color: var(--color-text);
+  font: inherit;
+  font-size: .9375rem;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.action-sheet__item:active {
+  background: var(--color-bg-hover, rgba(128, 128, 128, .1));
+}
+
+.action-sheet__item svg {
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
+}
+
+.action-sheet__item--danger {
+  color: var(--color-danger);
+}
+
+.action-sheet__item[hidden],
+.action-sheet__separator[hidden],
+.action-sheet__picker[hidden] {
+  display: none;
+}
+
+.action-sheet__picker {
+  overflow: hidden;
+}
+
+/* When the picker is inside the sheet, override its fixed positioning */
+.action-sheet__picker #emoji-picker-container {
+  position: static;
+  box-shadow: none;
+  border-radius: 0;
+  width: 100%;
+}
+
+.action-sheet__picker emoji-picker {
+  width: 100%;
+  height: 300px;
+}
+
+.action-sheet__separator {
+  margin: 0;
+  border: none;
+  border-top: 1px solid var(--color-border);
 }

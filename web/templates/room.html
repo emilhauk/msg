@@ -260,6 +260,48 @@
   </ol>
 </dialog>
 
+<dialog id="message-actions" class="action-sheet">
+  <div class="action-sheet__content">
+    <div class="action-sheet__handle" touch-action="none"><div class="action-sheet__pill"></div></div>
+    <div class="action-sheet__preview" id="action-sheet-preview"></div>
+    <hr class="action-sheet__separator action-sheet__preview-sep">
+    <button class="action-sheet__item" data-action="react">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M8 14s1.5 2 4 2 4-2 4-2"/>
+        <line x1="9" y1="9" x2="9.01" y2="9"/>
+        <line x1="15" y1="9" x2="15.01" y2="9"/>
+      </svg>
+      React
+    </button>
+    <div class="action-sheet__picker" id="action-sheet-picker" hidden></div>
+    <button class="action-sheet__item" data-action="copy">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>
+        <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>
+      </svg>
+      Copy text
+    </button>
+    <hr class="action-sheet__separator" hidden>
+    <button class="action-sheet__item" data-action="edit" hidden>
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+        <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+      </svg>
+      Edit
+    </button>
+    <button class="action-sheet__item action-sheet__item--danger" data-action="delete" hidden>
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <polyline points="3 6 5 6 21 6"/>
+        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+        <path d="M10 11v6M14 11v6"/>
+        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+      </svg>
+      Delete
+    </button>
+  </div>
+</dialog>
+
 <dialog id="lightbox" class="lightbox">
   <button class="lightbox__close" aria-label="Lukk">&times;</button>
   <button class="lightbox__nav lightbox__nav--prev" aria-label="Forrige" hidden>

@@ -40,7 +40,8 @@ document.addEventListener('click', (e) => {
     !container.hidden &&
     !e.target.closest('#emoji-picker-container') &&
     !e.target.closest('[data-emoji-toggle]') &&
-    !e.target.closest('[data-reaction-add]')
+    !e.target.closest('[data-reaction-add]') &&
+    !e.target.closest('#message-actions')
   ) {
     container.hidden = true;
   }
