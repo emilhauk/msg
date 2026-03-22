@@ -75,11 +75,19 @@ if (!isTouchDevice) {
     clearHighlight();
     article.classList.add('message--sheet-target');
 
+    // Hide content off-screen before opening so there's no flash.
+    content.style.transform = 'translateY(100%)';
     dialog.showModal();
-    content.animate(
-      [{ transform: 'translateY(100%)' }, { transform: 'translateY(0)' }],
-      { duration: 250, easing: 'ease-out' },
-    );
+    // Wait one frame for the dialog to be fully laid out in the top layer,
+    // then trigger the slide-up animation.
+    requestAnimationFrame(() => {
+      content.style.transform = '';
+      dialog.classList.add('is-opening');
+      content.addEventListener('animationend', function handler() {
+        content.removeEventListener('animationend', handler);
+        dialog.classList.remove('is-opening');
+      });
+    });
   }
 
   function showInlinePicker() {
@@ -159,17 +167,14 @@ if (!isTouchDevice) {
   function closeSheet(afterClose) {
     hideInlinePicker();
     dialog.classList.add('is-closing');
-    const anim = content.animate(
-      [{ transform: 'translateY(0)' }, { transform: 'translateY(100%)' }],
-      { duration: 200, easing: 'ease-in' },
-    );
-    anim.onfinish = () => {
+    dialog.addEventListener('animationend', function handler() {
+      dialog.removeEventListener('animationend', handler);
       dialog.classList.remove('is-closing');
       dialog.close();
       clearHighlight();
       targetMsgId = null;
       if (afterClose) afterClose();
-    };
+    });
   }
 
   // Close the sheet after an emoji is selected in inline reaction mode.

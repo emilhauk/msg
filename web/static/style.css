@@ -2258,9 +2258,9 @@ emoji-picker {
   position: fixed;
   inset: 0;
   width: 100%;
-  max-width: 100vw;
-  height: 100dvh;
-  max-height: 100dvh;
+  max-width: 100%;
+  height: 100%;
+  max-height: none;
   margin: 0;
   padding: 0;
   border: none;
@@ -2281,6 +2281,24 @@ emoji-picker {
 
 .action-sheet.is-closing::backdrop {
   animation: action-sheet-fade-out 200ms ease forwards;
+}
+
+.action-sheet.is-opening > .action-sheet__content {
+  animation: action-sheet-slide-up 250ms ease both;
+}
+
+.action-sheet.is-closing > .action-sheet__content {
+  animation: action-sheet-slide-down 200ms ease forwards;
+}
+
+@keyframes action-sheet-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+@keyframes action-sheet-slide-down {
+  from { transform: translateY(0); }
+  to   { transform: translateY(100%); }
 }
 
 @keyframes action-sheet-fade-in {
@@ -2397,10 +2415,6 @@ emoji-picker {
 .action-sheet__picker emoji-picker {
   width: 100%;
   height: 300px;
-  --background:               var(--color-surface);
-  --button-hover-background:  var(--color-border);
-  --button-active-background: var(--color-border);
-  --input-border-color:       var(--color-border);
 }
 
 .action-sheet__separator {
