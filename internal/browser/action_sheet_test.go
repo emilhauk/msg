@@ -141,6 +141,9 @@ func TestActionSheet_PreviewShowsAuthorAndText(t *testing.T) {
 	).Bool()
 	require.True(t, dialogOpen, "action sheet dialog should be open after tap")
 
+	// Wait for the slide-up animation to finish (250ms Web Animations API).
+	time.Sleep(350 * time.Millisecond)
+
 	// Avatar must be visible within the dialog bounds.
 	avatarResult := page.MustEval(isVisibleInSheetJS, "#action-sheet-preview .avatar")
 	assert.True(t, avatarResult.Get("found").Bool(), "avatar element should exist in preview")
