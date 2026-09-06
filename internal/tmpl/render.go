@@ -305,6 +305,7 @@ func isVideoType(contentType string) bool {
 
 var funcMap = template.FuncMap{
 	"dict":         dict,
+	"truncate":     truncate,
 	"linkify":      linkify,
 	"renderText":   renderText,
 	"reactionData": reactionData,
@@ -508,4 +509,13 @@ func dict(kv ...any) map[string]any {
 		m[kv[i].(string)] = kv[i+1]
 	}
 	return m
+}
+
+// truncate cuts s to at most n runes, appending an ellipsis when cut.
+func truncate(s string, n int) string {
+	r := []rune(s)
+	if len(r) <= n {
+		return s
+	}
+	return string(r[:n]) + "…"
 }

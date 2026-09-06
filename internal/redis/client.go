@@ -839,6 +839,7 @@ func (c *Client) SaveMessage(ctx context.Context, msg model.Message) error {
 		"kind", msg.Kind,
 		"created_at", msStr,
 		"attachments", msg.AttachmentsJSON,
+		"reply_to", msg.ReplyToID,
 	)
 	pipe.Expire(ctx, "messages:"+msg.ID, messageTTL)
 	pipe.ZAdd(ctx, "rooms:"+msg.RoomID+":messages", goredis.Z{Score: ms, Member: msg.ID})
@@ -868,6 +869,7 @@ func (c *Client) GetMessage(ctx context.Context, id string) (*model.Message, err
 		CreatedAt:       time.UnixMilli(ms),
 		AttachmentsJSON: vals["attachments"],
 		EditedAtMS:      vals["edited_at"],
+		ReplyToID:       vals["reply_to"],
 	}
 	if msg.AttachmentsJSON != "" && msg.AttachmentsJSON != "null" {
 		_ = json.Unmarshal([]byte(msg.AttachmentsJSON), &msg.Attachments)

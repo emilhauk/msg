@@ -11,6 +11,7 @@ if (!isTouchDevice) {
 
   const dialog = document.getElementById('message-actions');
   const btnReact = dialog.querySelector('[data-action="react"]');
+  const btnReply = dialog.querySelector('[data-action="reply"]');
   const btnCopy = dialog.querySelector('[data-action="copy"]');
   const btnEdit = dialog.querySelector('[data-action="edit"]');
   const btnDelete = dialog.querySelector('[data-action="delete"]');
@@ -125,6 +126,13 @@ if (!isTouchDevice) {
     } else {
       showInlinePicker();
     }
+  });
+
+  btnReply.addEventListener('click', () => {
+    const msgId = targetMsgId;
+    closeSheet(() => {
+      if (window.__startReply) window.__startReply(msgId);
+    });
   });
 
   btnCopy.addEventListener('click', () => {

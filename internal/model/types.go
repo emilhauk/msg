@@ -38,9 +38,12 @@ type Message struct {
 	// EditedAtMS is stored in Redis as millisecond unix timestamp string.
 	// Empty for messages that have never been edited.
 	EditedAtMS string `redis:"edited_at"`
+	// ReplyToID is the ID of the message this one quotes. Empty for non-replies.
+	ReplyToID string `redis:"reply_to"`
 
 	// Populated from Redis lookups or JSON decode; not stored directly.
 	User        *User
+	ReplyTo     *Message
 	Unfurl      *Unfurl
 	Reactions   []Reaction
 	Attachments []Attachment

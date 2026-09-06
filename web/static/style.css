@@ -1156,6 +1156,25 @@ img { display: block; max-width: 100%; }
   opacity: .75;
 }
 
+.message__quote {
+  display: block;
+  margin: .125rem 0 .25rem;
+  padding: .25rem .5rem;
+  border-left: 3px solid var(--color-primary);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+  font-size: .8125rem;
+  color: var(--color-text-muted);
+  text-decoration: none;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.message__quote:hover { color: var(--color-text); }
+.message__quote-author { font-weight: 600; color: var(--color-text); margin-right: .375rem; }
+.message__quote-text--deleted { font-style: italic; }
+.message:target { background: var(--color-bg-subtle); box-shadow: inset 3px 0 0 var(--color-primary); }
+
 /* ---- Floating message toolbar (Slack-style hover actions) ---- */
 .message__toolbar {
   position: absolute;
@@ -1571,6 +1590,16 @@ body[data-action-sheet] .message__toolbar {
   flex-shrink: 0;
   border-top: 1px solid var(--color-border);
 }
+
+.message-form__reply {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding: 0 .75rem .375rem;
+  font-size: .8125rem;
+  color: var(--color-text-muted);
+}
+.message-form__reply-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .message-form__bar {
   display: flex;

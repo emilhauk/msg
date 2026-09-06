@@ -103,7 +103,7 @@ POST /auth/password/login                  — email+password login (only when E
 GET  /                                     — redirect → last opened room (users:{uuid}:last_room) if accessible, else newest accessible room
 GET  /rooms/{id}                           — room page (last 50 msgs)
 GET  /rooms/{id}/events                    — SSE stream (Redis Pub/Sub)
-POST /rooms/{id}/messages                  — post message → 204 (SSE delivers to all)
+POST /rooms/{id}/messages                  — post message → 204 (SSE delivers to all); optional reply_to=<msgID> (must be same room, non-system) else 400
 GET  /rooms/{id}/messages?before=<ms>&limit=50  — paginated history partial
 PATCH   /rooms/{id}/messages/{msgID}       — edit own message → 204 + SSE edit event
 DELETE  /rooms/{id}/messages/{msgID}       — delete own message → 204 + SSE delete event
@@ -157,7 +157,7 @@ rooms:{id}:messages                     ZSet    message IDs scored by created_at
 rooms:{id}:members                      ZSet    user IDs scored by last-post time (unix ms); no TTL
 rooms:{id}:events                       Pub/Sub SSE fan-out channel
 users:{uuid}:events                     Pub/Sub user-level SSE channel (unread badges, future cross-room events)
-messages:{msg-id}                       Hash    id, room_id, user_id, text, kind, attachments (JSON), created_at (ms); TTL 30 days
+messages:{msg-id}                       Hash    id, room_id, user_id, text, kind, attachments (JSON), reply_to (parent msg id or ""), created_at (ms); TTL 30 days
 reactions:{msg-id}                      Hash    emoji → count; TTL 30 days
 reactions:{msg-id}:users                Hash    "{emoji}\x00{userID}" → "1"; TTL 30 days
 reactions:{msg-id}:order                ZSet    emoji members scored by unix-ms of first-use; TTL 30 days
@@ -253,6 +253,12 @@ System messages:
 - Cannot be edited or deleted (handlers return 403)
 - Skip unfurl and reaction hydration
 - Preserve the real `UserID` for attribution; `Text` carries the display string
+
+---
+
+## Quote-Reply
+
+Replies are ordinary messages with `reply_to` set; the timeline stays flat (no threads). `hydrateReply()` in `internal/handler/messages.go` loads the parent + author into `Message.ReplyTo`; a missing parent renders "Message deleted". `message.html` shows a `.message__quote` anchor to `#msg-<parent>` (native scroll; `.message:target` highlights). Parent text snapshot is taken at render time, so an edited parent is fresh on page load but stale on the SSE-pushed copy until refresh. Client: `room/reply.js` sets `#reply-to-input` and shows the "Replying to" strip; cleared on successful send, cancel, or Escape. Mobile: "Reply" item in the action sheet.
 
 ---
 
