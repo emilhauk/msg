@@ -71,8 +71,14 @@
     {{if .ReplyToID}}
     <a class="message__quote" href="#msg-{{.ReplyToID}}">
       {{if .ReplyTo}}
-      <span class="message__quote-author">{{if .ReplyTo.User}}{{.ReplyTo.User.Name}}{{else}}Unknown{{end}}</span>
-      <span class="message__quote-text">{{if .ReplyTo.Text}}{{truncate .ReplyTo.Text 120}}{{else}}Attachment{{end}}</span>
+      {{if .ReplyTo.Attachments}}{{with index .ReplyTo.Attachments 0}}
+        {{if isImageType .ContentType}}<img class="message__quote-thumb" src="{{.URL}}" alt="" loading="lazy">
+        {{else if isVideoType .ContentType}}<video class="message__quote-thumb" src="{{.URL}}" preload="metadata" muted></video>{{end}}
+      {{end}}{{end}}
+      <span class="message__quote-body">
+        <span class="message__quote-author">{{if .ReplyTo.User}}{{.ReplyTo.User.Name}}{{else}}Unknown{{end}}</span>
+        <span class="message__quote-text">{{if .ReplyTo.Text}}{{truncate .ReplyTo.Text 120}}{{else if .ReplyTo.Attachments}}{{if isVideoType (index .ReplyTo.Attachments 0).ContentType}}Video{{else}}Photo{{end}}{{else}}Attachment{{end}}</span>
+      </span>
       {{else}}
       <span class="message__quote-text message__quote-text--deleted">Message deleted</span>
       {{end}}

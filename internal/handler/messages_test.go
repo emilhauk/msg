@@ -719,3 +719,34 @@ func TestHandleRoom_Reply_DeletedParentPlaceholder(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	assert.Contains(t, string(body), "Message deleted")
 }
+
+func TestHandlePost_Reply_AttachmentParentShowsThumb(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: testRoom, Name: "Test Room"})
+	ts.GrantAccess(t, testRoom, alice.ID)
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), alice))
+	parent := seedMessage(t, ts, alice, "", 1000)
+	parent.AttachmentsJSON = `[{"url":"https://cdn.example/pic.png","content_type":"image/png","filename":"pic"}]`
+	require.NoError(t, ts.Redis.SaveMessage(context.Background(), parent))
+	cookie := ts.AuthCookie(t, alice)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sub := ts.Redis.Subscribe(ctx, testRoom)
+	defer sub.Close()
+	_, err := sub.Receive(ctx)
+	require.NoError(t, err)
+
+	form := url.Values{"text": {"nice pic"}, "reply_to": {parent.ID}}
+	req, _ := http.NewRequest("POST", ts.Server.URL+"/rooms/"+testRoom+"/messages", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookie)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+	msg, err := sub.ReceiveMessage(ctx)
+	require.NoError(t, err)
+	assert.Contains(t, msg.Payload, `class="message__quote-thumb" src="https://cdn.example/pic.png"`)
+	assert.Contains(t, msg.Payload, ">Photo<")
+}
