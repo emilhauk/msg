@@ -9,6 +9,8 @@ const ALLOWED_TYPES = {
   'video/mp4': true,
   'video/webm': true,
 };
+// Server re-encodes these to H.264 MP4 (POST /rooms/{id}/transcode).
+const TRANSCODE_TYPES = { 'video/quicktime': true };
 const ta = document.querySelector('.message-form__textarea');
 const form = document.querySelector('.message-form');
 const previewsEl = document.getElementById('attachment-previews');
@@ -142,39 +144,18 @@ if (ta && form && previewsEl && inputEl) {
     return chip;
   }
 
-  // Upload a single File object: presign → PUT → chip.
-  function uploadFile(file) {
+  // Show a chip for file and run upload(), which resolves to an attachment {url, content_type, filename}.
+  function track(file, upload) {
     const objectURL = URL.createObjectURL(file);
     const chip = makeChip(file.type, objectURL);
 
     uploadCount++;
     setSendDisabled(true);
 
-    const hash = randomHex(12);
-    const params = new URLSearchParams({
-      hash: hash,
-      content_type: file.type,
-      content_length: file.size,
-    });
-
-    fetch(`/rooms/${window.roomID}/upload-url?${params}`, { credentials: 'same-origin' })
-      .then((r) => {
-        if (!r.ok) throw new Error(`presign failed: ${r.status}`);
-        return r.json();
-      })
-      .then((data) =>
-        fetch(data.upload_url, {
-          method: 'PUT',
-          headers: { 'Content-Type': file.type },
-          body: file,
-        }).then((r) => {
-          if (!r.ok) throw new Error(`upload failed: ${r.status}`);
-          return data.public_url;
-        }),
-      )
-      .then((publicURL) => {
+    upload()
+      .then((att) => {
         const idx = pendingAttachments.length;
-        pendingAttachments.push({ url: publicURL, content_type: file.type, filename: hash });
+        pendingAttachments.push(att);
         chip.dataset.attachmentIdx = idx;
         syncInput();
         chip.classList.add('attachment-chip--done');
@@ -192,6 +173,77 @@ if (ta && form && previewsEl && inputEl) {
       });
   }
 
+  // presign → PUT directly to S3.
+  function uploadFile(file) {
+    track(file, () => {
+      const hash = randomHex(12);
+      const params = new URLSearchParams({
+        hash: hash,
+        content_type: file.type,
+        content_length: file.size,
+      });
+      return fetch(`/rooms/${window.roomID}/upload-url?${params}`, { credentials: 'same-origin' })
+        .then((r) => {
+          if (!r.ok) throw new Error(`presign failed: ${r.status}`);
+          return r.json();
+        })
+        .then((data) =>
+          fetch(data.upload_url, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type },
+            body: file,
+          }).then((r) => {
+            if (!r.ok) throw new Error(`upload failed: ${r.status}`);
+            return { url: data.public_url, content_type: file.type, filename: hash };
+          }),
+        );
+    });
+  }
+
+  // Stream to the server, which transcodes and stores the result.
+  function transcodeFile(file) {
+    track(file, () =>
+      fetch(`/rooms/${window.roomID}/transcode`, {
+        method: 'POST',
+        headers: { 'Content-Type': file.type },
+        body: file,
+        credentials: 'same-origin',
+      }).then((r) => {
+        if (!r.ok) throw new Error(`transcode failed: ${r.status}`);
+        return r.json();
+      }),
+    );
+  }
+
+  // Safari is the only browser that decodes HEIC; re-encode on the sender's device so everyone else can view it.
+  function toJpeg(file) {
+    return createImageBitmap(file).then((bmp) => {
+      const canvas = document.createElement('canvas');
+      canvas.width = bmp.width;
+      canvas.height = bmp.height;
+      canvas.getContext('2d').drawImage(bmp, 0, 0);
+      bmp.close();
+      return new Promise((resolve, reject) =>
+        canvas.toBlob((blob) => (blob ? resolve(new File([blob], 'image.jpg', { type: 'image/jpeg' })) : reject()), 'image/jpeg', 0.9),
+      );
+    });
+  }
+
+  function rejectChip(file) {
+    const chip = makeChip('', '');
+    chip.classList.add('attachment-chip--error');
+    chip.querySelector('.attachment-chip__icon').textContent = '\u26A0\uFE0F';
+    chip.title = `Unsupported file type: ${file.type || file.name}`;
+    chip.querySelector('.attachment-chip__spinner').remove();
+  }
+
+  function intake(file) {
+    if (ALLOWED_TYPES[file.type]) return uploadFile(file);
+    if (TRANSCODE_TYPES[file.type]) return transcodeFile(file);
+    if (file.type.startsWith('video/')) return rejectChip(file);
+    toJpeg(file).then(uploadFile, () => rejectChip(file));
+  }
+
   // ---- File picker button ----
   const attachBtn = document.querySelector('[data-attach-trigger]');
   if (attachBtn && fileInput) {
@@ -199,9 +251,7 @@ if (ta && form && previewsEl && inputEl) {
       fileInput.click();
     });
     fileInput.addEventListener('change', () => {
-      Array.from(fileInput.files || []).forEach((file) => {
-        if (ALLOWED_TYPES[file.type]) uploadFile(file);
-      });
+      Array.from(fileInput.files || []).forEach(intake);
       // Reset so selecting the same file again triggers another change event.
       fileInput.value = '';
     });
@@ -210,7 +260,7 @@ if (ta && form && previewsEl && inputEl) {
   // ---- Paste handler ----
   ta.addEventListener('paste', (e) => {
     const items = Array.from(e.clipboardData?.items || []);
-    const mediaItems = items.filter((i) => i.kind === 'file' && ALLOWED_TYPES[i.type]);
+    const mediaItems = items.filter((i) => i.kind === 'file');
     if (mediaItems.length === 0) return;
 
     // Prevent the browser pasting binary data as text into the textarea.
@@ -219,7 +269,7 @@ if (ta && form && previewsEl && inputEl) {
     mediaItems.forEach((item) => {
       const file = item.getAsFile();
       if (!file) return;
-      uploadFile(file);
+      intake(file);
     });
   });
 
@@ -272,9 +322,7 @@ if (ta && form && previewsEl && inputEl) {
       hideOverlay();
 
       const files = Array.from(e.dataTransfer?.files || []);
-      files.forEach((file) => {
-        if (ALLOWED_TYPES[file.type]) uploadFile(file);
-      });
+      files.forEach(intake);
 
       if (ta) ta.focus();
     });

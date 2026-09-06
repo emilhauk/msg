@@ -290,6 +290,8 @@ func main() {
 	if s3Client != nil {
 		uploadHandler := &handler.UploadHandler{Redis: redis, S3: s3Client}
 		mux.Handle("GET /rooms/{id}/upload-url", authMW(http.HandlerFunc(uploadHandler.HandlePresignURL)))
+		transcodeHandler := &handler.TranscodeHandler{Redis: redis, S3: s3Client}
+		mux.Handle("POST /rooms/{id}/transcode", authMW(http.HandlerFunc(transcodeHandler.HandleTranscode)))
 	}
 
 	addr := ":" + port

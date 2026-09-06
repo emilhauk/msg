@@ -82,6 +82,21 @@ func (c *S3Client) PresignPut(ctx context.Context, key, contentType string, cont
 	return req.URL, nil
 }
 
+// PutObject uploads body to key with the given content type.
+func (c *S3Client) PutObject(ctx context.Context, key, contentType string, body io.Reader, size int64) error {
+	_, err := c.client.PutObject(ctx, &s3.PutObjectInput{
+		Bucket:        aws.String(c.bucket),
+		Key:           aws.String(key),
+		ContentType:   aws.String(contentType),
+		ContentLength: aws.Int64(size),
+		Body:          body,
+	})
+	if err != nil {
+		return fmt.Errorf("storage: put object %q: %w", key, err)
+	}
+	return nil
+}
+
 // PublicURL returns the public URL for a stored object.
 func (c *S3Client) PublicURL(key string) string {
 	return c.endpoint + "/" + c.bucket + "/" + key

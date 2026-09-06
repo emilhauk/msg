@@ -1,6 +1,6 @@
 FROM golang:1.27-alpine
 
-RUN go install github.com/air-verse/air@latest
+RUN apk add --no-cache ffmpeg && go install github.com/air-verse/air@latest
 
 WORKDIR /app
 

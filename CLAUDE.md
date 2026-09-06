@@ -48,6 +48,7 @@ internal/
     profile.go                 # GET/PATCH/DELETE /user/profile; POST /user/identities/{provider}/disconnect
     reactions.go               # POST /rooms/{id}/messages/{msgID}/reactions — toggle, SSE broadcast
     upload.go                  # GET /rooms/{id}/upload-url — presigned S3 PUT (optional)
+    transcode.go               # POST /rooms/{id}/transcode — ffmpeg → H.264 MP4 → S3 (optional; needs ffmpeg)
     sse.go                     # GET /rooms/{id}/events — Redis Pub/Sub → SSE fan-out
     unfurl.go                  # fetchMicrolink(); isValidHTTPURL()
   middleware/
@@ -113,6 +114,7 @@ DELETE /rooms/{id}/leave                   — leave room; if last member, delet
 POST /rooms/{id}/active                    — record user as actively viewing room (updates last_active + viewing key)
 POST /rooms/{id}/inactive                  — clear viewing key immediately (called via sendBeacon on hide)
 GET  /rooms/{id}/upload-url?hash=&content_type=&content_length=  — presign S3 PUT (optional)
+POST /rooms/{id}/transcode                 — raw video body (video/*, ≤100 MiB) → ffmpeg → S3 → attachment JSON (optional, with S3)
 
 GET  /push/vapid-public-key                — VAPID public key (unauthenticated)
 POST /push/subscribe                       — save Web Push subscription
@@ -270,7 +272,11 @@ Replies are ordinary messages with `reply_to` set; the timeline stays flat (no t
 4. Client includes `{ url: public_url, content_type, filename: hash }` as JSON in the `attachments` form field on message POST.
 5. Server validates content type and URL on POST; deletes S3 objects when message is deleted.
 
-Allowed content types: `image/jpeg`, `image/png`, `image/gif`, `image/webp`, `video/mp4`, `video/webm`. Max size: **50 MiB**.
+Allowed content types: `image/jpeg`, `image/png`, `image/gif`, `image/webp`, `video/mp4`, `video/webm`. Max size: **50 MiB**. Other image types (HEIC etc.) are re-encoded to JPEG client-side via canvas in `room/upload.js` before upload; unsupported files show an error chip instead of being dropped silently.
+
+### Video Transcode Flow
+
+`video/quicktime` (iPhone `.mov`, usually HEVC) bypasses presign. Client POSTs the raw file to `/rooms/{id}/transcode` (session cookie auth, `Content-Type: video/*`, max **100 MiB**). Server buffers to a temp dir, runs `ffmpeg` (libx264 veryfast, crf 23, aac, capped at 1920px wide, `+faststart`), `PutObject`s the result to S3 as `video/mp4` under the normal media key, and returns attachment JSON. Synchronous: the request stays open for the whole transcode; the client reuses the upload chip spinner. Two concurrent ffmpeg jobs; others queue in-process. `ffmpeg` must be on `PATH` (installed in both Dockerfiles); `handler.FFmpegPath` is overridable for tests.
 
 S3 key format: `rooms/{roomID}/{unixMs}-{userID}/{hash}.{ext}`
 
