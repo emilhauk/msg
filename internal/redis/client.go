@@ -677,9 +677,9 @@ func (c *Client) GetAccessibleRooms(ctx context.Context, userID string) ([]*mode
 		if err != nil || room == nil {
 			continue
 		}
-		// ponytail: direct = exactly two members; add a room kind field if 2-person groups need to stay groups
+		// ponytail: direct = fewer than three members; add a room kind field if small groups need to stay groups
 		n, _ := c.rdb.SCard(ctx, "rooms:"+id+":access").Result()
-		room.Direct = n == 2
+		room.Direct = n < 3
 		rooms = append(rooms, room)
 	}
 	return rooms, nil

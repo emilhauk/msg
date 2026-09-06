@@ -323,7 +323,7 @@ No webpack, vite, or any frontend bundler. No TypeScript compilation. No Tailwin
 ## Decisions & Constraints
 
 - **GitHub OAuth only.** Handler rejects non-GitHub providers. Don't add Google/Discord without a deliberate decision.
-- **Sidebar grouping.** Rooms with exactly two members in `rooms:{id}:access` are shown under "Direct"; all others under "Groups". Heuristic only — no room kind field exists. Split happens in `HandleRoom` via `Room.Direct`, set by `GetAccessibleRooms`.
+- **Sidebar grouping.** Rooms with fewer than three members in `rooms:{id}:access` are shown under "Direct"; all others under "Groups". Heuristic only — no room kind field exists. Split happens in `HandleRoom` via `Room.Direct`, set by `GetAccessibleRooms`.
 - **Last room.** `HandleRoom` writes `users:{uuid}:last_room` on every render; `HandleRoot` prefers it over the newest room. PWA `start_url` is `/`, so app relaunch lands in the last room.
 - **No room-creation UI.** Rooms are seeded at startup only (`SeedRoom` in `main.go`). `bemro` is the only active room.
 - **No ORM. No SQL.** Redis only, through `internal/redis/client.go`.
