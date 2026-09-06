@@ -41,6 +41,9 @@ var (
 // Set HEADLESS=false in the environment to run with a visible browser window.
 func newBrowser(t *testing.T) *rod.Browser {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("skipping browser test in short mode")
+	}
 	headless := os.Getenv("HEADLESS") != "false"
 	l := launcher.New().Headless(headless)
 	if path, exists := launcher.LookPath(); exists {
