@@ -200,7 +200,7 @@ if (ta && form && previewsEl && inputEl) {
     });
   }
 
-  // Stream to the server, which transcodes and stores the result.
+  // Stream to the server, which transcodes and stores the result. Response is newline heartbeats followed by one JSON line.
   function transcodeFile(file) {
     track(file, () =>
       fetch(`/rooms/${window.roomID}/transcode`, {
@@ -208,10 +208,16 @@ if (ta && form && previewsEl && inputEl) {
         headers: { 'Content-Type': file.type },
         body: file,
         credentials: 'same-origin',
-      }).then((r) => {
-        if (!r.ok) throw new Error(`transcode failed: ${r.status}`);
-        return r.json();
-      }),
+      })
+        .then((r) => {
+          if (!r.ok) throw new Error(`transcode failed: ${r.status}`);
+          return r.text();
+        })
+        .then((text) => {
+          const res = JSON.parse(text.trim().split('\n').pop());
+          if (res.error) throw new Error(`transcode failed: ${res.error}`);
+          return res;
+        }),
     );
   }
 

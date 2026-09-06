@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
@@ -23,6 +24,9 @@ import (
 )
 
 const maxTranscodeBytes = 100 << 20
+
+// HeartbeatInterval is overridable in tests.
+var HeartbeatInterval = 10 * time.Second
 
 // ponytail: in-process semaphore, requests queue behind it; move to a job queue if uploads pile up.
 var transcodeSem = make(chan struct{}, 2)
@@ -89,38 +93,65 @@ func (h *TranscodeHandler) HandleTranscode(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	cmd := exec.CommandContext(r.Context(), FFmpegPath, "-y", "-i", in,
+	// ponytail: newline heartbeats keep iOS Safari's 60 s idle timeout from killing the request mid-encode; job queue + polling if this outgrows one request.
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	flush := func() {
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}
+	flush()
+
+	result := make(chan transcodeResult, 1)
+	go func() { result <- h.encode(r.Context(), roomID, user.ID, in, out) }()
+	tick := time.NewTicker(HeartbeatInterval)
+	defer tick.Stop()
+	for {
+		select {
+		case <-tick.C:
+			_, _ = io.WriteString(w, "\n")
+			flush()
+		case res := <-result:
+			_ = json.NewEncoder(w).Encode(res)
+			return
+		}
+	}
+}
+
+type transcodeResult struct {
+	model.Attachment
+	Error string `json:"error,omitempty"`
+}
+
+func (h *TranscodeHandler) encode(ctx context.Context, roomID, userID, in, out string) transcodeResult {
+	cmd := exec.CommandContext(ctx, FFmpegPath, "-y", "-i", in,
 		"-vf", "scale='min(1920,iw)':-2",
 		"-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", "-threads", "4",
 		"-c:a", "aac", "-movflags", "+faststart", out)
 	if output, err := cmd.CombinedOutput(); err != nil {
-		log.Ctx(r.Context()).Warn().Err(err).Str("ffmpeg", string(output)).Msg("transcode failed")
-		http.Error(w, "could not transcode video", http.StatusUnprocessableEntity)
-		return
+		log.Ctx(ctx).Warn().Err(err).Str("ffmpeg", string(output)).Msg("transcode failed")
+		return transcodeResult{Error: "could not transcode video"}
 	}
 
 	of, err := os.Open(out)
 	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+		return transcodeResult{Error: "internal error"}
 	}
 	defer of.Close()
 	st, err := of.Stat()
 	if err != nil {
-		http.Error(w, "internal error", http.StatusInternalServerError)
-		return
+		return transcodeResult{Error: "internal error"}
 	}
 
 	var b [6]byte
 	_, _ = rand.Read(b[:])
 	hash := hex.EncodeToString(b[:])
-	key := storage.MediaKey(roomID, fmt.Sprintf("%d-%s", time.Now().UnixMilli(), user.ID), hash+".mp4")
-	if err := h.S3.PutObject(r.Context(), key, "video/mp4", of, st.Size()); err != nil {
-		log.Ctx(r.Context()).Error().Err(err).Msg("transcode: upload")
-		http.Error(w, "upload failed", http.StatusBadGateway)
-		return
+	key := storage.MediaKey(roomID, fmt.Sprintf("%d-%s", time.Now().UnixMilli(), userID), hash+".mp4")
+	if err := h.S3.PutObject(ctx, key, "video/mp4", of, st.Size()); err != nil {
+		log.Ctx(ctx).Error().Err(err).Msg("transcode: upload")
+		return transcodeResult{Error: "upload failed"}
 	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(model.Attachment{URL: h.S3.PublicURL(key), ContentType: "video/mp4", Filename: hash})
+	return transcodeResult{Attachment: model.Attachment{URL: h.S3.PublicURL(key), ContentType: "video/mp4", Filename: hash}}
 }

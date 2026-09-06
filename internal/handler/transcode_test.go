@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -66,6 +67,35 @@ func TestTranscode_Success(t *testing.T) {
 	require.Contains(t, att.URL, "/media/rooms/"+testRoom+"/")
 	require.True(t, strings.HasSuffix(att.URL, att.Filename+".mp4"))
 	require.Contains(t, string(*stored), "fake mov bytes")
+}
+
+func TestTranscode_HeartbeatsWhileEncoding(t *testing.T) {
+	h, _ := newTranscodeHandler(t)
+	require.NoError(t, os.WriteFile(handler.FFmpegPath, []byte("#!/bin/sh\nsleep 0.2\nfor a; do last=$a; done\ncp \"$3\" \"$last\"\n"), 0o755))
+	prev := handler.HeartbeatInterval
+	handler.HeartbeatInterval = 20 * time.Millisecond
+	t.Cleanup(func() { handler.HeartbeatInterval = prev })
+
+	rec := doTranscode(h, "video/quicktime", strings.NewReader("fake mov bytes"), 14)
+	require.Equal(t, http.StatusOK, rec.Code)
+	require.True(t, rec.Flushed)
+	lines := strings.Split(strings.TrimSpace(rec.Body.String()), "\n")
+	require.Equal(t, 1, len(lines), "heartbeats must be bare newlines")
+	require.True(t, strings.HasPrefix(rec.Body.String(), "\n\n"), rec.Body.String())
+	var att model.Attachment
+	require.NoError(t, json.Unmarshal([]byte(lines[0]), &att))
+	require.Equal(t, "video/mp4", att.ContentType)
+}
+
+func TestTranscode_FFmpegFailureReportedInBody(t *testing.T) {
+	h, _ := newTranscodeHandler(t)
+	require.NoError(t, os.WriteFile(handler.FFmpegPath, []byte("#!/bin/sh\nexit 1\n"), 0o755))
+
+	rec := doTranscode(h, "video/quicktime", strings.NewReader("fake mov bytes"), 14)
+	require.Equal(t, http.StatusOK, rec.Code)
+	var res struct{ Error string }
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &res))
+	require.Equal(t, "could not transcode video", res.Error)
 }
 
 func TestTranscode_Rejects(t *testing.T) {
