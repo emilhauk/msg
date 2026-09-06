@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -644,4 +645,77 @@ func TestPostMessage_SkipsUnreadForSender(t *testing.T) {
 	case <-time.After(300 * time.Millisecond):
 		// expected: no message for sender
 	}
+}
+
+// ---------------------------------------------------------------------------
+// Quote-reply
+// ---------------------------------------------------------------------------
+
+func TestHandlePost_Reply_BroadcastsQuote(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: testRoom, Name: "Test Room"})
+	ts.GrantAccess(t, testRoom, alice.ID)
+	ts.GrantAccess(t, testRoom, bob.ID)
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), bob))
+	parent := seedMessage(t, ts, bob, "original question", 1000)
+	cookie := ts.AuthCookie(t, alice)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	sub := ts.Redis.Subscribe(ctx, testRoom)
+	defer sub.Close()
+	_, err := sub.Receive(ctx)
+	require.NoError(t, err)
+
+	form := url.Values{"text": {"my answer"}, "reply_to": {parent.ID}}
+	req, _ := http.NewRequest("POST", ts.Server.URL+"/rooms/"+testRoom+"/messages", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookie)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+	msg, err := sub.ReceiveMessage(ctx)
+	require.NoError(t, err)
+	assert.Contains(t, msg.Payload, `href="#msg-`+parent.ID+`"`)
+	assert.Contains(t, msg.Payload, "original question")
+	assert.Contains(t, msg.Payload, bob.Name)
+}
+
+func TestHandlePost_Reply_OtherRoomRejected(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: testRoom, Name: "Test Room"})
+	ts.SeedRoom(t, model.Room{ID: "other", Name: "Other"})
+	ts.GrantAccess(t, testRoom, alice.ID)
+	ts.GrantAccess(t, "other", alice.ID)
+	parent := seedMessage(t, ts, alice, "elsewhere", 1000)
+	cookie := ts.AuthCookie(t, alice)
+
+	form := url.Values{"text": {"reply"}, "reply_to": {parent.ID}}
+	req, _ := http.NewRequest("POST", ts.Server.URL+"/rooms/other/messages", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.AddCookie(cookie)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestHandleRoom_Reply_DeletedParentPlaceholder(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: testRoom, Name: "Test Room"})
+	ts.GrantAccess(t, testRoom, alice.ID)
+	require.NoError(t, ts.Redis.CreateUser(context.Background(), alice))
+	parent := seedMessage(t, ts, alice, "gone soon", 2000)
+	reply := seedMessage(t, ts, alice, "answer", 1000)
+	reply.ReplyToID = parent.ID
+	require.NoError(t, ts.Redis.SaveMessage(context.Background(), reply))
+	require.NoError(t, ts.Redis.DeleteMessage(context.Background(), testRoom, parent.ID))
+	cookie := ts.AuthCookie(t, alice)
+
+	req, _ := http.NewRequest("GET", ts.Server.URL+"/rooms/"+testRoom, nil)
+	req.AddCookie(cookie)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	body, _ := io.ReadAll(resp.Body)
+	assert.Contains(t, string(body), "Message deleted")
 }

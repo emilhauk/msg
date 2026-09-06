@@ -677,9 +677,9 @@ func (c *Client) GetAccessibleRooms(ctx context.Context, userID string) ([]*mode
 		if err != nil || room == nil {
 			continue
 		}
-		// ponytail: direct = exactly two members; add a room kind field if 2-person groups need to stay groups
+		// ponytail: direct = fewer than three members; add a room kind field if small groups need to stay groups
 		n, _ := c.rdb.SCard(ctx, "rooms:"+id+":access").Result()
-		room.Direct = n == 2
+		room.Direct = n < 3
 		rooms = append(rooms, room)
 	}
 	return rooms, nil
@@ -839,6 +839,7 @@ func (c *Client) SaveMessage(ctx context.Context, msg model.Message) error {
 		"kind", msg.Kind,
 		"created_at", msStr,
 		"attachments", msg.AttachmentsJSON,
+		"reply_to", msg.ReplyToID,
 	)
 	pipe.Expire(ctx, "messages:"+msg.ID, messageTTL)
 	pipe.ZAdd(ctx, "rooms:"+msg.RoomID+":messages", goredis.Z{Score: ms, Member: msg.ID})
@@ -868,6 +869,7 @@ func (c *Client) GetMessage(ctx context.Context, id string) (*model.Message, err
 		CreatedAt:       time.UnixMilli(ms),
 		AttachmentsJSON: vals["attachments"],
 		EditedAtMS:      vals["edited_at"],
+		ReplyToID:       vals["reply_to"],
 	}
 	if msg.AttachmentsJSON != "" && msg.AttachmentsJSON != "null" {
 		_ = json.Unmarshal([]byte(msg.AttachmentsJSON), &msg.Attachments)

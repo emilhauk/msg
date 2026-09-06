@@ -189,6 +189,12 @@
           hx-on::after-request="this.reset()">
       <div id="attachment-previews" class="attachment-previews"></div>
       <input type="hidden" name="attachments" id="attachment-input" value="">
+      <input type="hidden" name="reply_to" id="reply-to-input" value="">
+      <div class="message-form__reply" id="reply-strip" hidden>
+        <span>Replying to <b id="reply-strip-name"></b></span>
+        <span class="message-form__reply-text" id="reply-strip-text"></span>
+        <button type="button" class="btn btn--icon" data-reply-cancel aria-label="Cancel reply">&times;</button>
+      </div>
       <input type="file" id="file-input" accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm" multiple hidden>
       <div class="message-form__bar">
         <button type="button" class="btn btn--icon message-form__attach-btn" data-attach-trigger aria-label="Attach file">
@@ -328,6 +334,13 @@
       React
     </button>
     <div class="action-sheet__picker" id="action-sheet-picker" hidden></div>
+    <button class="action-sheet__item" data-action="reply">
+      <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <polyline points="9 17 4 12 9 7"/>
+        <path d="M20 18v-2a4 4 0 0 0-4-4H4"/>
+      </svg>
+      Reply
+    </button>
     <button class="action-sheet__item" data-action="copy">
       <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
         <rect x="9" y="9" width="13" height="13" rx="2" ry="2"/>

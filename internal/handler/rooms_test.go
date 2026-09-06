@@ -724,6 +724,8 @@ func TestHandleRoom_SidebarSplitsGroupsAndDirect(t *testing.T) {
 	ts.SeedRoom(t, model.Room{ID: "grp", Name: "Group Room"})
 	ts.SeedRoom(t, model.Room{ID: "dm", Name: "DM Room"})
 	ts.GrantAccess(t, "grp", alice.ID)
+	ts.GrantAccess(t, "grp", bob.ID)
+	ts.GrantAccess(t, "grp", approver.ID)
 	ts.GrantAccess(t, "dm", alice.ID)
 	ts.GrantAccess(t, "dm", bob.ID)
 	cookie := ts.AuthCookie(t, alice)

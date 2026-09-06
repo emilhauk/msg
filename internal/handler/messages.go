@@ -80,6 +80,15 @@ func (h *MessagesHandler) HandlePost(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	replyToID := strings.TrimSpace(r.FormValue("reply_to"))
+	if replyToID != "" {
+		parent, err := h.Redis.GetMessage(r.Context(), replyToID)
+		if err != nil || parent == nil || parent.RoomID != roomID || parent.Kind != "" {
+			http.Error(w, "invalid reply_to", http.StatusBadRequest)
+			return
+		}
+	}
+
 	var attachmentsJSON string
 	if len(attachments) > 0 {
 		b, _ := json.Marshal(attachments)
@@ -98,12 +107,14 @@ func (h *MessagesHandler) HandlePost(w http.ResponseWriter, r *http.Request) {
 		User:            user,
 		Attachments:     attachments,
 		AttachmentsJSON: attachmentsJSON,
+		ReplyToID:       replyToID,
 	}
 
 	if err := h.Redis.SaveMessage(r.Context(), msg); err != nil {
 		http.Error(w, "failed to save message", http.StatusInternalServerError)
 		return
 	}
+	hydrateReply(r.Context(), h.Redis, &msg)
 
 	// Render and publish via SSE.
 	// CurrentUserID is intentionally empty: the HTML is broadcast to every
@@ -580,8 +591,23 @@ func hydrateMessages(ctx context.Context, redis *redisclient.Client, msgs []*mod
 		if err == nil {
 			m.Reactions = reactions
 		}
+		hydrateReply(ctx, redis, m)
 	}
 	return nil
+}
+
+// hydrateReply loads the quoted parent message (with its author) for a reply.
+// A missing parent leaves ReplyTo nil so the template renders a placeholder.
+func hydrateReply(ctx context.Context, redis *redisclient.Client, m *model.Message) {
+	if m.ReplyToID == "" {
+		return
+	}
+	parent, err := redis.GetMessage(ctx, m.ReplyToID)
+	if err != nil || parent == nil {
+		return
+	}
+	parent.User, _ = redis.GetUser(ctx, parent.UserID)
+	m.ReplyTo = parent
 }
 
 // fetchAndPublishUnfurl fetches a link preview and publishes an SSE event.
