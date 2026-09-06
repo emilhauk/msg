@@ -91,7 +91,7 @@ func (h *TranscodeHandler) HandleTranscode(w http.ResponseWriter, r *http.Reques
 
 	cmd := exec.CommandContext(r.Context(), FFmpegPath, "-y", "-i", in,
 		"-vf", "scale='min(1920,iw)':-2",
-		"-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p",
+		"-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", "-threads", "4",
 		"-c:a", "aac", "-movflags", "+faststart", out)
 	if output, err := cmd.CombinedOutput(); err != nil {
 		log.Ctx(r.Context()).Warn().Err(err).Str("ffmpeg", string(output)).Msg("transcode failed")

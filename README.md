@@ -228,7 +228,7 @@ Without correct configuration you may see `ERR_HTTP2_PROTOCOL_ERROR` in the brow
 
 ### nginx
 
-The SSE endpoint (`/rooms/*/events`) needs its own `location` block with buffering disabled and an extended read timeout. The upstream connection must use HTTP/1.1 (nginx defaults to HTTP/1.0 for proxied requests, which does not support keep-alive streaming).
+Two endpoints need their own `location` blocks. The SSE endpoint (`/rooms/*/events`) needs one with buffering disabled and an extended read timeout. The upstream connection must use HTTP/1.1 (nginx defaults to HTTP/1.0 for proxied requests, which does not support keep-alive streaming).
 
 ```nginx
 server {
@@ -251,6 +251,17 @@ server {
     chunked_transfer_encoding on;
   }
 
+  # Video transcode — large body, long-running request
+  location ~ ^/rooms/[^/]+/transcode$ {
+    proxy_pass http://127.0.0.1:8080;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+
+    client_max_body_size 100m;
+    proxy_request_buffering off;
+    proxy_read_timeout 600s;
+  }
+
   location / {
     proxy_pass http://127.0.0.1:8080;
     proxy_set_header Host $host;
@@ -259,7 +270,13 @@ server {
 }
 ```
 
-For other reverse proxies (Caddy, Traefik, HAProxy, etc.) consult their documentation for SSE or long-lived streaming connections — the same principles apply: disable response buffering and set a long (or unlimited) upstream read timeout.
+Direct-to-S3 uploads bypass the proxy entirely; only `/rooms/*/transcode` streams the file through it. Without the block above nginx rejects the body at its 1 MiB default (`413`) or drops the connection at its 60 s read timeout (`504`).
+
+### Caddy
+
+Caddy's defaults work for both endpoints: `reverse_proxy` streams SSE responses (`flush_interval -1` is applied automatically for `text/event-stream`), imposes no request body limit, and has no upstream read timeout. Do not set `request_body max_size` below 100 MiB on the transcode path.
+
+For other reverse proxies (Traefik, HAProxy, etc.) consult their documentation for SSE or long-lived streaming connections — the same principles apply: disable response buffering and set a long (or unlimited) upstream read timeout.
 
 ## Known limitations
 
