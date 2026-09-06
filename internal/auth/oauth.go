@@ -39,15 +39,15 @@ type oauthIdentity struct {
 
 // Handler holds dependencies for OAuth and session handlers.
 type Handler struct {
-	Redis               *redisclient.Client
-	SessionSecret       []byte
-	BaseURL             string
-	OpenRegistration    bool
-	AllowList           []string // lowercased, trimmed email addresses
-	GitHubClientID      string
-	GitHubClientSecret  string
-	GoogleClientID      string
-	GoogleClientSecret  string
+	Redis              *redisclient.Client
+	SessionSecret      []byte
+	BaseURL            string
+	OpenRegistration   bool
+	AllowList          []string // lowercased, trimmed email addresses
+	GitHubClientID     string
+	GitHubClientSecret string
+	GoogleClientID     string
+	GoogleClientSecret string
 }
 
 // secure reports whether cookies should be restricted to HTTPS connections.

@@ -261,7 +261,7 @@ func TestFastResume_VisibilityChange(t *testing.T) {
 //     - The message text reflects the edit.
 //     - Bob's 👎 reaction pill is present.
 //     - Alice's 👍 reaction pill still has the active class (applyMyReactions
-//       ran on the refreshed article).
+//     ran on the refreshed article).
 func TestCatchUp_StaleContentRefreshedOnResume(t *testing.T) {
 	t.Parallel()
 	if testing.Short() {

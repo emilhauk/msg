@@ -10,8 +10,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/rs/zerolog/log"
 	webpushlib "github.com/SherClockHolmes/webpush-go"
+	"github.com/rs/zerolog/log"
 )
 
 // Config holds the VAPID credentials needed to send push notifications.

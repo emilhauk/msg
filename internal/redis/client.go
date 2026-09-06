@@ -677,9 +677,26 @@ func (c *Client) GetAccessibleRooms(ctx context.Context, userID string) ([]*mode
 		if err != nil || room == nil {
 			continue
 		}
+		// ponytail: direct = exactly two members; add a room kind field if 2-person groups need to stay groups
+		n, _ := c.rdb.SCard(ctx, "rooms:"+id+":access").Result()
+		room.Direct = n == 2
 		rooms = append(rooms, room)
 	}
 	return rooms, nil
+}
+
+// SetLastRoom records the room the user most recently opened.
+func (c *Client) SetLastRoom(ctx context.Context, userID, roomID string) error {
+	return c.rdb.Set(ctx, "users:"+userID+":last_room", roomID, 0).Err()
+}
+
+// GetLastRoom returns the room the user most recently opened, or "" if none.
+func (c *Client) GetLastRoom(ctx context.Context, userID string) (string, error) {
+	val, err := c.rdb.Get(ctx, "users:"+userID+":last_room").Result()
+	if errors.Is(err, goredis.Nil) {
+		return "", nil
+	}
+	return val, err
 }
 
 // GetInviteCandidates returns users who appear in other rooms accessible to
@@ -1404,9 +1421,9 @@ func (c *Client) IsRoomViewing(ctx context.Context, userID, roomID string) (bool
 
 // memberStatusPayload is the JSON payload for memberstatus SSE events.
 type memberStatusPayload struct {
-	UserID   string  `json:"userId"`
-	IsMember bool    `json:"isMember"`
-	Muted    bool    `json:"muted"`
+	UserID    string  `json:"userId"`
+	IsMember  bool    `json:"isMember"`
+	Muted     bool    `json:"muted"`
 	MuteUntil *string `json:"muteUntil"`
 }
 

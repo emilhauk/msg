@@ -8,7 +8,7 @@ if ! echo "$COMMAND" | grep -qE '(^|;|\|&)\s*git commit'; then
 fi
 
 echo "Blocking git commit — running make test first..." >&2
-make -C /home/emil/Source/emilhauk/msg test
+make -C /home/emilhauk/Source/emilhauk/msg test
 
 if [ $? -ne 0 ]; then
   echo "make test failed. Commit aborted." >&2

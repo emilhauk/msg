@@ -19,6 +19,8 @@ type Room struct {
 
 	// UnreadCount is populated per-request for the sidebar; not stored in Redis.
 	UnreadCount int `redis:"-"`
+	// Direct is populated per-request for the sidebar; not stored in Redis.
+	Direct bool `redis:"-"`
 }
 
 // Message represents a single chat message.

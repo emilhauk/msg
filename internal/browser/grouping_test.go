@@ -216,7 +216,7 @@ func TestGrouping_DeleteRegroups(t *testing.T) {
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 
 	// Wait for delete SSE event and re-grouping.
-	page.Timeout(5 * time.Second).MustEval(`(msgId) => {
+	page.Timeout(5*time.Second).MustEval(`(msgId) => {
 		return new Promise((resolve) => {
 			const check = () => {
 				if (!document.getElementById('msg-' + msgId)) return resolve(true);

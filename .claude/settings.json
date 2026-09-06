@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "/home/emil/Source/emilhauk/msg/.claude/hooks/pre-commit.sh"
+            "command": "/home/emilhauk/Source/emilhauk/msg/.claude/hooks/pre-commit.sh"
           }
         ]
       }

@@ -13,10 +13,10 @@ import (
 
 func TestSetCookie_SecureFlag(t *testing.T) {
 	tests := []struct {
-		name           string
-		secure         bool
-		wantSecure     bool
-		wantSameSite   string
+		name         string
+		secure       bool
+		wantSecure   bool
+		wantSameSite string
 	}{
 		{name: "http (dev)", secure: false, wantSecure: false, wantSameSite: "Lax"},
 		{name: "https (prod)", secure: true, wantSecure: true, wantSameSite: "Lax"},

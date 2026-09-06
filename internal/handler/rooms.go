@@ -39,6 +39,14 @@ func (h *RoomsHandler) HandleRoot(w http.ResponseWriter, r *http.Request) {
 	rooms, err := h.Redis.GetAccessibleRooms(r.Context(), user.ID)
 	if err == nil && len(rooms) > 0 {
 		dest := "/rooms/" + rooms[0].ID
+		if last, _ := h.Redis.GetLastRoom(r.Context(), user.ID); last != "" {
+			for _, rm := range rooms {
+				if rm.ID == last {
+					dest = "/rooms/" + last
+					break
+				}
+			}
+		}
 		if q := r.URL.RawQuery; q != "" {
 			dest += "?" + q
 		}
@@ -53,7 +61,8 @@ func (h *RoomsHandler) HandleRoot(w http.ResponseWriter, r *http.Request) {
 type roomPageData struct {
 	User     *model.User
 	Room     *model.Room
-	Rooms    []*model.Room // accessible rooms for the left sidebar
+	Groups   []*model.Room // accessible group rooms for the left sidebar
+	Directs  []*model.Room // accessible one-on-one rooms for the left sidebar
 	Messages []*model.MessageView
 	// OldestMS is the created_at ms timestamp of the oldest rendered message,
 	// used as the cursor for infinite scroll.
@@ -106,13 +115,23 @@ func (h *RoomsHandler) HandleRoom(w http.ResponseWriter, r *http.Request) {
 		views[i] = &model.MessageView{Message: m, CurrentUserID: user.ID}
 	}
 
+	_ = h.Redis.SetLastRoom(r.Context(), user.ID, roomID)
 	rooms, _ := h.Redis.GetAccessibleRooms(r.Context(), user.ID)
 	_ = h.Redis.GetUnreadCounts(r.Context(), user.ID, rooms)
+	var groups, directs []*model.Room
+	for _, rm := range rooms {
+		if rm.Direct {
+			directs = append(directs, rm)
+		} else {
+			groups = append(groups, rm)
+		}
+	}
 
 	h.Renderer.Render(w, http.StatusOK, "room.html", roomPageData{
 		User:     user,
 		Room:     room,
-		Rooms:    rooms,
+		Groups:   groups,
+		Directs:  directs,
 		Messages: views,
 		OldestMS: oldestMS,
 	})

@@ -497,6 +497,7 @@ img { display: block; max-width: 100%; }
   margin-bottom: .5rem;
   padding: 0 .5rem;
 }
+.room-sidebar__heading + .room-sidebar__link ~ .room-sidebar__heading { margin-top: 1rem; }
 
 .room-sidebar__link {
   display: flex;
