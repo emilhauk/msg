@@ -113,10 +113,10 @@ func (h *SSEHandler) HandleSSE(w http.ResponseWriter, r *http.Request) {
 				fmt.Fprintf(w, "event: edit\ndata: %s\ndata: %s\n\n", msgID, escapeSSE(html))
 				flusher.Flush()
 			case strings.HasPrefix(payload, "memberstatus:"):
-			jsonData := strings.TrimPrefix(payload, "memberstatus:")
-			fmt.Fprintf(w, "event: memberstatus\ndata: %s\n\n", jsonData)
-			flusher.Flush()
-		case strings.HasPrefix(payload, "redirect:"):
+				jsonData := strings.TrimPrefix(payload, "memberstatus:")
+				fmt.Fprintf(w, "event: memberstatus\ndata: %s\n\n", jsonData)
+				flusher.Flush()
+			case strings.HasPrefix(payload, "redirect:"):
 				url := strings.TrimPrefix(payload, "redirect:")
 				fmt.Fprintf(w, "event: redirect\ndata: %s\n\n", url)
 				flusher.Flush()

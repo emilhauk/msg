@@ -695,3 +695,50 @@ func TestHandleRoot_NoRooms(t *testing.T) {
 	body, _ := io.ReadAll(resp.Body)
 	assert.Contains(t, string(body), "Create room")
 }
+
+func TestHandleRoot_RedirectsToLastRoom(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: "first", Name: "First"})
+	ts.SeedRoom(t, model.Room{ID: "second", Name: "Second"})
+	ts.GrantAccess(t, "first", alice.ID)
+	ts.GrantAccess(t, "second", alice.ID)
+	cookie := ts.AuthCookie(t, alice)
+	client := testutil.NoRedirectClient()
+
+	req, _ := http.NewRequest("GET", ts.Server.URL+"/rooms/first", nil)
+	req.AddCookie(cookie)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	req, _ = http.NewRequest("GET", ts.Server.URL+"/", nil)
+	req.AddCookie(cookie)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusFound, resp.StatusCode)
+	assert.Equal(t, "/rooms/first", resp.Header.Get("Location"))
+}
+
+func TestHandleRoom_SidebarSplitsGroupsAndDirect(t *testing.T) {
+	ts := testutil.NewTestServer(t)
+	ts.SeedRoom(t, model.Room{ID: "grp", Name: "Group Room"})
+	ts.SeedRoom(t, model.Room{ID: "dm", Name: "DM Room"})
+	ts.GrantAccess(t, "grp", alice.ID)
+	ts.GrantAccess(t, "dm", alice.ID)
+	ts.GrantAccess(t, "dm", bob.ID)
+	cookie := ts.AuthCookie(t, alice)
+
+	req, _ := http.NewRequest("GET", ts.Server.URL+"/rooms/grp", nil)
+	req.AddCookie(cookie)
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	body, _ := io.ReadAll(resp.Body)
+	html := string(body)
+
+	gi, di := strings.Index(html, ">Groups<"), strings.Index(html, ">Direct<")
+	require.Greater(t, gi, -1)
+	require.Greater(t, di, -1)
+	assert.Less(t, gi, strings.Index(html, "# Group Room"))
+	assert.Less(t, strings.Index(html, "# Group Room"), di)
+	assert.Less(t, di, strings.Index(html, "# DM Room"))
+}

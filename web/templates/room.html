@@ -93,14 +93,14 @@
 
   {{/* ---- Left sidebar: room list ---- */}}
   <aside class="room-sidebar" id="room-sidebar" aria-label="Rooms">
-    <h2 class="room-sidebar__heading">Rooms</h2>
     <nav>
-      {{range .Data.Rooms}}
-      <a class="room-sidebar__link{{if eq .ID $.Data.Room.ID}} room-sidebar__link--active{{end}}"
-         href="/rooms/{{.ID}}" data-room-id="{{.ID}}">
-        <span class="room-sidebar__name"># {{.Name}}</span>
-        <span class="room-sidebar__badge" id="unread-badge-{{.ID}}"{{if or (eq .ID $.Data.Room.ID) (le .UnreadCount 0)}} hidden{{end}}>{{if gt .UnreadCount 99}}99+{{else}}{{.UnreadCount}}{{end}}</span>
-      </a>
+      {{if .Data.Groups}}
+      <h2 class="room-sidebar__heading">Groups</h2>
+      {{range .Data.Groups}}{{template "roomlink" (dict "Room" . "Current" $.Data.Room.ID)}}{{end}}
+      {{end}}
+      {{if .Data.Directs}}
+      <h2 class="room-sidebar__heading">Direct</h2>
+      {{range .Data.Directs}}{{template "roomlink" (dict "Room" . "Current" $.Data.Room.ID)}}{{end}}
       {{end}}
     </nav>
     <div class="room-sidebar__footer">
@@ -643,4 +643,12 @@
   }());
 </script>
 <script type="module" src="/static/room.js?v={{$.BuildVersion}}"></script>
+{{end}}
+
+{{define "roomlink"}}
+<a class="room-sidebar__link{{if eq .Room.ID .Current}} room-sidebar__link--active{{end}}"
+   href="/rooms/{{.Room.ID}}" data-room-id="{{.Room.ID}}">
+  <span class="room-sidebar__name"># {{.Room.Name}}</span>
+  <span class="room-sidebar__badge" id="unread-badge-{{.Room.ID}}"{{if or (eq .Room.ID .Current) (le .Room.UnreadCount 0)}} hidden{{end}}>{{if gt .Room.UnreadCount 99}}99+{{else}}{{.Room.UnreadCount}}{{end}}</span>
+</a>
 {{end}}

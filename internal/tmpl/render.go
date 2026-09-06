@@ -304,6 +304,7 @@ func isVideoType(contentType string) bool {
 }
 
 var funcMap = template.FuncMap{
+	"dict":         dict,
 	"linkify":      linkify,
 	"renderText":   renderText,
 	"reactionData": reactionData,
@@ -497,4 +498,14 @@ func templateName(path string) string {
 		}
 	}
 	return path
+}
+
+// dict builds a map from alternating key/value args, for passing multiple
+// values into a {{template}} call.
+func dict(kv ...any) map[string]any {
+	m := make(map[string]any, len(kv)/2)
+	for i := 0; i+1 < len(kv); i += 2 {
+		m[kv[i].(string)] = kv[i+1]
+	}
+	return m
 }
