@@ -1599,6 +1599,7 @@ body[data-action-sheet] .message__toolbar {
   font-size: .8125rem;
   color: var(--color-text-muted);
 }
+.message-form__reply[hidden] { display: none; }
 .message-form__reply-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 .message-form__bar {
