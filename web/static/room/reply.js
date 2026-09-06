@@ -5,6 +5,7 @@ const input = document.getElementById('reply-to-input');
 const strip = document.getElementById('reply-strip');
 const nameEl = document.getElementById('reply-strip-name');
 const textEl = document.getElementById('reply-strip-text');
+const thumbEl = document.getElementById('reply-strip-thumb');
 const form = document.querySelector('.message-form');
 const composer = document.querySelector('.message-form__textarea');
 
@@ -14,7 +15,19 @@ export function startReply(msgId) {
   input.value = msgId;
   nameEl.textContent = article.querySelector('.message__author')?.textContent.trim() ?? '';
   const t = document.getElementById(`text-${msgId}`);
-  textEl.textContent = t ? t.innerText.trim() : 'Attachment';
+  const media = article.querySelector('.message__media-img, .message__media-video source');
+  thumbEl.replaceChildren();
+  if (media) {
+    const thumb = document.createElement(media.tagName === 'IMG' ? 'img' : 'video');
+    thumb.className = 'message-form__reply-thumb';
+    thumb.src = media.getAttribute('src');
+    if (thumb.tagName === 'VIDEO') {
+      thumb.muted = true;
+      thumb.preload = 'metadata';
+    }
+    thumbEl.appendChild(thumb);
+  }
+  textEl.textContent = t ? t.innerText.trim() : media ? (media.tagName === 'IMG' ? 'Photo' : 'Video') : 'Attachment';
   strip.hidden = false;
   composer?.focus();
 }

@@ -258,7 +258,7 @@ System messages:
 
 ## Quote-Reply
 
-Replies are ordinary messages with `reply_to` set; the timeline stays flat (no threads). `hydrateReply()` in `internal/handler/messages.go` loads the parent + author into `Message.ReplyTo`; a missing parent renders "Message deleted". `message.html` shows a `.message__quote` anchor to `#msg-<parent>` (native scroll; `.message:target` highlights). Parent text snapshot is taken at render time, so an edited parent is fresh on page load but stale on the SSE-pushed copy until refresh. Client: `room/reply.js` sets `#reply-to-input` and shows the "Replying to" strip; cleared on successful send, cancel, or Escape. Mobile: "Reply" item in the action sheet.
+Replies are ordinary messages with `reply_to` set; the timeline stays flat (no threads). `hydrateReply()` in `internal/handler/messages.go` loads the parent + author into `Message.ReplyTo`; a missing parent renders "Message deleted". `message.html` shows a `.message__quote` anchor to `#msg-<parent>` (native scroll; `.message:target` highlights) with a thumbnail of the parent's first image/video attachment when present. Parent text snapshot is taken at render time, so an edited parent is fresh on page load but stale on the SSE-pushed copy until refresh. Client: `room/reply.js` sets `#reply-to-input` and shows the "Replying to" strip; cleared on successful send, cancel, or Escape. Mobile: "Reply" item in the action sheet.
 
 ---
 
