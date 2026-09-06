@@ -73,7 +73,7 @@
       {{if .ReplyTo}}
       {{if .ReplyTo.Attachments}}{{with index .ReplyTo.Attachments 0}}
         {{if isImageType .ContentType}}<img class="message__quote-thumb" src="{{.URL}}" alt="" loading="lazy">
-        {{else if isVideoType .ContentType}}<video class="message__quote-thumb" src="{{.URL}}" preload="metadata" muted></video>{{end}}
+        {{else if isVideoType .ContentType}}<video class="message__quote-thumb" src="{{.URL}}#t=0.001" preload="metadata" muted playsinline></video>{{end}}
       {{end}}{{end}}
       <span class="message__quote-body">
         <span class="message__quote-author">{{if .ReplyTo.User}}{{.ReplyTo.User.Name}}{{else}}Unknown{{end}}</span>
@@ -102,8 +102,8 @@
         {{if isImageType .ContentType}}
           <img class="message__media-img" src="{{.URL}}" alt="{{.Filename}}" loading="lazy">
         {{else if isVideoType .ContentType}}
-        <video class="message__media-video" controls preload="metadata">
-          <source src="{{.URL}}" type="{{.ContentType}}">
+        <video class="message__media-video" controls preload="metadata" playsinline>
+          <source src="{{.URL}}#t=0.001" type="{{.ContentType}}">
         </video>
         {{end}}
       {{end}}
